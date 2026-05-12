@@ -6,7 +6,7 @@ const SocketContext = createContext({ socket: null, connected: false });
 export const useSocket = () => useContext(SocketContext);
 
 export function SocketProvider({ children }) {
-  const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL || '';
+  const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL || 'https://virtual-art-backend.onrender.com';
 
   const [connected, setConnected] = useState(false);
 

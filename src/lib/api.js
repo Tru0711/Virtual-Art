@@ -1,6 +1,4 @@
-
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://virtual-art-backend.onrender.com/api';
 
 class ApiClient {
   constructor() {
