@@ -10,7 +10,6 @@ dotenv.config();
 
 const app = express();
 app.set('trust proxy', true);
-
 // Parse CORS origins from environment or use development defaults
 const getCorsOrigins = () => {
   if (process.env.CORS_ORIGINS) {
@@ -25,6 +24,19 @@ const getCorsOrigins = () => {
 };
 
 const allowedOrigins = getCorsOrigins();
+
+// Top-level middleware: always add CORS headers for allowed origins early
+app.use((req, res, next) => {
+  const origin = req.get('Origin');
+  if (!origin) return next();
+  if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', allowedOrigins.includes('*') ? '*' : origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,PATCH,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+  }
+  next();
+});
 
 const corsOptions = {
   origin: (origin, callback) => {
