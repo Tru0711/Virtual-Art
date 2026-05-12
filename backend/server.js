@@ -9,23 +9,64 @@ const User = require('./models/User');
 dotenv.config();
 
 const app = express();
+app.set('trust proxy', true);
 
 // Parse CORS origins from environment or use development defaults
 const getCorsOrigins = () => {
   if (process.env.CORS_ORIGINS) {
     return process.env.CORS_ORIGINS.split(',').map(origin => origin.trim());
   }
+  // If running in production and no explicit origins set, allow all origins
+  // (fallback). It's recommended to set CORS_ORIGINS in production.
+  if (process.env.NODE_ENV === 'production') {
+    return ['*'];
+  }
   return ['http://localhost:5173', 'http://localhost:5174', 'http://127.0.0.1:5173', 'http://127.0.0.1:5174'];
 };
 
+const allowedOrigins = getCorsOrigins();
+
 const corsOptions = {
-  origin: getCorsOrigins(),
+  origin: (origin, callback) => {
+    // Allow non-browser requests (e.g. server-to-server) without origin
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'));
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 };
+
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
+// Explicitly set CORS response headers for allowed origins and log rejections.
+app.use((req, res, next) => {
+  const origin = req.get('Origin');
+  if (!origin) return next();
+
+  if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+    // When credentials are enabled, echo the origin instead of '*'
+    res.setHeader('Access-Control-Allow-Origin', allowedOrigins.includes('*') ? '*' : origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,PATCH,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+    return next();
+  }
+
+  // Log rejected origins for diagnostics
+  console.warn(`CORS rejection for origin: ${origin} path: ${req.path}`);
+
+  // If this is a preflight request, respond immediately with 403
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(403);
+    return;
+  }
+
+  next();
+});
 app.use(express.json());
 
 app.use('/uploads/private', (req, res) => {
@@ -146,6 +187,19 @@ app.get('/api/health', (req, res) => {
     state === 3 ? 'disconnecting' :
     'disconnected';
   res.json({ status: 'OK', message: 'VisualArt Backend is running', mongo: mongoState });
+});
+
+// Diagnostic route to verify CORS headers from deployed environment
+app.get('/api/ping-cors', (req, res) => {
+  const origin = req.get('Origin') || null;
+  const allowed = !origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin);
+  if (origin && allowed) {
+    res.setHeader('Access-Control-Allow-Origin', allowedOrigins.includes('*') ? '*' : origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,PATCH,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+  }
+  res.json({ ok: true, origin, allowed });
 });
 
 module.exports = app;
