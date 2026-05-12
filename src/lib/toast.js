@@ -38,7 +38,7 @@ export const toastError = (message, duration = 4000) => {
 
 export const toastWarning = (message, duration = 4000) => {
   return toast.custom(
-    (t) =>
+    () =>
       React.createElement(
         'div',
         { className: 'flex items-center gap-3' },
@@ -62,7 +62,7 @@ export const toastWarning = (message, duration = 4000) => {
 
 export const toastInfo = (message, duration = 3000) => {
   return toast.custom(
-    (t) =>
+    () =>
       React.createElement(
         'div',
         { className: 'flex items-center gap-3' },
@@ -115,7 +115,7 @@ export const updateToast = (toastId, message, type = 'success') => {
   };
 
   toast.custom(
-    (t) =>
+    () =>
       React.createElement(
         'div',
         {

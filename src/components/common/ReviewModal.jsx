@@ -10,7 +10,6 @@ const ReviewModal = ({ isOpen, onClose, artwork, orderId, existingReview, onRevi
     const [isSubmitting, setIsSubmitting] = useState(false);
     const isEditMode = !!existingReview;
 
-    // Pre-fill form with existing review data
     useEffect(() => {
         if (existingReview) {
             setRating(existingReview.rating);
@@ -42,13 +41,11 @@ const ReviewModal = ({ isOpen, onClose, artwork, orderId, existingReview, onRevi
             let response;
             
             if (isEditMode) {
-                // Update existing review
                 response = await api.updateReview(existingReview._id, {
                     rating,
                     comment: comment.trim()
                 });
             } else {
-                // Create new review
                 response = await api.createReview({
                     artwork_id: artwork._id,
                     rating,
@@ -56,12 +53,9 @@ const ReviewModal = ({ isOpen, onClose, artwork, orderId, existingReview, onRevi
                 });
             }
 
-            console.log('Review response:', response);
-
             if (response.success || response.message?.includes('successfully')) {
                 toast.success(isEditMode ? 'Review updated successfully!' : 'Review submitted successfully!');
                 onReviewSubmitted();
-                // Reset form
                 setRating(0);
                 setComment('');
                 onClose();
@@ -137,7 +131,6 @@ const ReviewModal = ({ isOpen, onClose, artwork, orderId, existingReview, onRevi
                 </div>
 
                 <form onSubmit={handleSubmit} className="p-6 space-y-6">
-                    {/* Artwork Info */}
                     <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
                         <img
                             src={getImageUrl(artwork.image_url) || 'https://images.pexels.com/photos/1266808/pexels-photo-1266808.jpeg'}
@@ -158,7 +151,6 @@ const ReviewModal = ({ isOpen, onClose, artwork, orderId, existingReview, onRevi
                         </div>
                     </div>
 
-                    {/* Rating */}
                     <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-3">
                             Rate this artwork<span className="text-red-500">*</span>
@@ -175,7 +167,6 @@ const ReviewModal = ({ isOpen, onClose, artwork, orderId, existingReview, onRevi
                         )}
                     </div>
 
-                    {/* Comment */}
                     <div>
                         <label htmlFor="comment" className="block text-sm font-semibold text-gray-700 mb-2">
                             Your Review<span className="text-red-500">*</span>
@@ -200,7 +191,6 @@ const ReviewModal = ({ isOpen, onClose, artwork, orderId, existingReview, onRevi
                         </div>
                     </div>
 
-                    {/* Submit Button */}
                     <div className="flex gap-3 pt-4">
                         <button
                             type="button"

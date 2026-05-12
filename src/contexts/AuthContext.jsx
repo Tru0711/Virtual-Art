@@ -35,16 +35,22 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const completeAuth = async (authResponse) => {
+    if (!authResponse?.token || !authResponse?.user) {
+      throw new Error('Invalid authentication response');
+    }
+
+    localStorage.setItem('token', authResponse.token);
+    api.setToken(authResponse.token);
+    setUser(authResponse.user);
+    await loadProfile(authResponse.user);
+    return authResponse;
+  };
+
   const login = async (credentials) => {
     try {
-      console.log('AuthContext: Attempting login...');
       const response = await api.login(credentials);
-      console.log('AuthContext: Login successful, response:', response);
-      setUser(response.user);
-      await loadProfile(response.user);
-      localStorage.setItem('token', response.token);
-      api.setToken(response.token);
-      console.log('AuthContext: Login complete');
+      await completeAuth(response);
       return response;
     } catch (error) {
       console.error('AuthContext: Login error:', error);
@@ -99,7 +105,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, profile, artistProfile, loading, isAdmin, login, logout, refreshProfile }}>
+    <AuthContext.Provider value={{ user, profile, artistProfile, loading, isAdmin, login, logout, refreshProfile, completeAuth }}>
       {children}
     </AuthContext.Provider>
   );

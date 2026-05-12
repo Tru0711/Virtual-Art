@@ -4,8 +4,6 @@ import { Palette, MapPin, Award, TrendingUp, Star } from 'lucide-react';
 import { api } from '../../lib/api';
 import { getImageUrl } from '../../lib/imageUtils';
 
-
-
 const fallbackImage = 'https://images.pexels.com/photos/1266808/pexels-photo-1266808.jpeg';
 
 const ArtistsPage = () => {
@@ -18,13 +16,10 @@ const ArtistsPage = () => {
       setLoading(true);
       setError('');
       
-      console.log('[ArtistsPage] Fetching artists from API...');
       const response = await api.getArtists();
-      console.log('[ArtistsPage] API response:', response);
       
       let list = Array.isArray(response) ? response : response?.data || [];
       
-      // Only artists with valid id; deduplicate by artist ID
       const withId = list.filter((a) => a.id || a._id);
       const uniqueArtists = Array.from(
         new Map(
@@ -35,12 +30,10 @@ const ArtistsPage = () => {
         ).values()
       );
       
-      console.log('[ArtistsPage] Processed artists:', uniqueArtists.length);
       setArtists(uniqueArtists);
     } catch (err) {
       console.error('[ArtistsPage] Error fetching artists:', err);
       
-      // Provide more specific error messages
       let errorMessage = 'Failed to load artists. Please try again.';
       
       if (err.message) {

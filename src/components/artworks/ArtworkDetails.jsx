@@ -8,6 +8,7 @@ import { toastSuccess, toastError } from '../../lib/toast';
 import { getImageUrl } from '../../lib/imageUtils';
 import ProtectedImage from '../common/ProtectedImage';
 import ReviewsList from '../reviews/ReviewsList';
+import { getBuyerPrice, getFormattedRupee, BUYER_MARKUP_LABEL } from '../../lib/pricing';
 /* eslint-enable no-unused-vars */
 
 const ArtworkDetails = () => {
@@ -188,6 +189,25 @@ const ArtworkDetails = () => {
     }
   };
 
+  const handleBuyNow = () => {
+    if (!isAuthenticated) {
+      navigate('/login/user', {
+        state: { from: location.pathname + location.search }
+      });
+      return;
+    }
+
+    if (artwork.status === 'sold') {
+      toastError('This artwork is already sold');
+      return;
+    }
+
+    const instantCheckout = { [artwork._id]: 1 };
+    localStorage.setItem('cartItems', JSON.stringify(instantCheckout));
+    window.dispatchEvent(new CustomEvent('cartUpdated'));
+    navigate('/checkout');
+  };
+
   // Helper to format painting dimensions
   const formatPaintingSize = () => {
     const width = artwork?.width;
@@ -366,7 +386,8 @@ const ArtworkDetails = () => {
               <div className="flex items-center justify-between flex-wrap gap-4">
                 <div>
                   <p className="text-sm text-gray-600 mb-1">Price</p>
-                  <p className="text-4xl font-bold text-gray-900">₹{Number(artwork.price).toLocaleString("en-IN")}</p>
+                  <p className="text-4xl font-bold text-gray-900">{getFormattedRupee(getBuyerPrice(artwork))}</p>
+                  <p className="text-sm text-gray-500 mt-1">{BUYER_MARKUP_LABEL} included at checkout</p>
                 </div>
                 <div className="text-right">
                   {artwork.medium && (
@@ -472,6 +493,17 @@ const ArtworkDetails = () => {
               </button>
               <div className="flex gap-4">
                 <button
+                  onClick={handleBuyNow}
+                  disabled={artwork.status === 'sold'}
+                  className={`flex-1 flex items-center justify-center gap-2 px-6 py-4 rounded-xl font-bold transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl ${
+                    artwork.status === 'sold'
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-blue-500 to-cyan-600 text-white hover:from-blue-600 hover:to-cyan-700'
+                  }`}
+                >
+                  {artwork.status === 'sold' ? 'Sold Out' : 'Buy Now'}
+                </button>
+                <button
                   onClick={handleAddToCart}
                   disabled={artwork.status === 'sold'}
                   className={`flex-1 flex items-center justify-center gap-2 px-6 py-4 rounded-xl font-bold transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl ${
@@ -557,7 +589,7 @@ const ArtworkDetails = () => {
                   <div className="p-4">
                     <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-1">{relatedArt.category}</p>
                     <h3 className="font-bold text-gray-900 mb-1 truncate">{relatedArt.title}</h3>
-                    <p className="text-xl font-bold text-gray-900">₹{Number(relatedArt.price).toLocaleString("en-IN")}</p>
+                    <p className="text-xl font-bold text-gray-900">{getFormattedRupee(getBuyerPrice(relatedArt))}</p>
                   </div>
                 </div>
               ))}

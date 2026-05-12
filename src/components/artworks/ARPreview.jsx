@@ -5,8 +5,6 @@ import { Text, Html } from '@react-three/drei';
 import { X, Eye } from 'lucide-react';
 import * as THREE from 'three';
 
-console.log('ARPreview component loaded');
-
 
 const ARArtwork = ({ imageUrl, title, onClose }) => {
   const [texture, setTexture] = useState(null);

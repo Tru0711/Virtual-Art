@@ -68,6 +68,53 @@ const artistProfileSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  payment_info: {
+    full_name: {
+      type: String,
+      default: ''
+    },
+    email: {
+      type: String,
+      default: ''
+    },
+    phone: {
+      type: String,
+      default: ''
+    },
+    account_number: {
+      type: String,
+      default: ''
+    },
+    ifsc: {
+      type: String,
+      default: ''
+    },
+    bank_name: {
+      type: String,
+      default: ''
+    },
+    account_type: {
+      type: String,
+      enum: ['Savings', 'Current', ''],
+      default: ''
+    },
+    pan_tax_id: {
+      type: String,
+      default: ''
+    },
+    is_completed: {
+      type: Boolean,
+      default: false
+    },
+    verified: {
+      type: Boolean,
+      default: false
+    },
+    updated_at: {
+      type: Date,
+      default: null
+    }
+  },
   created_at: {
     type: Date,
     default: Date.now

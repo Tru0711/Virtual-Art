@@ -1,10 +1,9 @@
-import { useState, useEffect } from 'react';
-// eslint-disable-next-line no-unused-vars
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Edit, Trash2, Save, X, Upload } from 'lucide-react';
 import { api } from '../../lib/api';
 import { getImageUrl } from '../../lib/imageUtils';
 import { toastSuccess, toastError } from '../../lib/toast';
-// eslint-disable-next-line no-unused-vars
 import ConfirmModal from '../auth/ConfirmModal';
 
 const ArtistArtworksTab = ({
@@ -14,6 +13,7 @@ const ArtistArtworksTab = ({
   onArtworkDeleted,
   onArtworkUploaded,
 }) => {
+  const navigate = useNavigate();
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [editingArtwork, setEditingArtwork] = useState(null);
@@ -43,10 +43,6 @@ const ArtistArtworksTab = ({
     tags: '',
     size: 'medium',
   });
-
-  useEffect(() => {
-    console.log('ArtistArtworksTab: artworks updated:', artworks?.length || 0);
-  }, [artworks]);
 
   const handleUploadArtwork = async (e) => {
     e.preventDefault();
@@ -125,7 +121,10 @@ const ArtistArtworksTab = ({
     } catch (error) {
       console.error('Error uploading artwork:', error);
 
-      if (error.status === 409) {
+      if (error.status === 402) {
+        toastError('Payment settings required. Please complete your payment information to upload artwork.');
+        setTimeout(() => navigate('/artist/payment-settings'), 1500);
+      } else if (error.status === 409) {
         toastError(error.message || 'Duplicate artwork detected. Please upload a different image.');
       } else if (error.status === 422) {
         toastError(error.message || 'Watermarked or copyrighted images are not allowed.');
@@ -243,7 +242,6 @@ const ArtistArtworksTab = ({
             />
           </div>
 
-          {/* Size Fields - Width x Height */}
           <div className="grid md:grid-cols-3 gap-4 mb-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Width</label>

@@ -1,18 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import {
-  Users,
-  Image,
-  ShoppingCart,
-  BarChart3,
-  Settings,
-  Bell,
-  MessageSquare,
-  Shield,
-  TrendingUp,
-  Eye,
-  ChevronRight,
-} from 'lucide-react';
+import { Users, Image, ShoppingCart, BarChart3, Settings, MessageSquare, TrendingUp, ChevronRight, Shield } from 'lucide-react';
 
 const AdminSidebar = ({ profile }) => {
   const location = useLocation();
@@ -21,16 +9,10 @@ const AdminSidebar = ({ profile }) => {
     { id: 'overview', label: 'Overview', icon: BarChart3 },
     { id: 'users', label: 'User Management', icon: Users },
     { id: 'artworks', label: 'Artwork Management', icon: Image },
-    { id: 'exhibitions', label: 'Exhibitions', icon: Image },
     { id: 'transactions', label: 'Transactions', icon: ShoppingCart },
     { id: 'reviews', label: 'Review Moderation', icon: MessageSquare },
-    { id: 'certificates', label: 'Certificates', icon: Shield },
-    { id: 'arvr', label: 'AR/VR Wall', icon: Eye },
-    { id: 'ai-insights', label: 'AI Insights', icon: TrendingUp },
     { id: 'analytics', label: 'Analytics', icon: TrendingUp },
-    { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'settings', label: 'Settings', icon: Settings },
-    { id: 'maintenance', label: 'Maintenance', icon: Settings },
   ];
 
   return (

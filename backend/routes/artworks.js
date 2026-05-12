@@ -7,11 +7,13 @@ const https = require('https');
 const path = require('path');
 const sharp = require('sharp');
 const Artwork = require('../models/Artwork');
+const Gallery = require('../models/Gallery');
 const Order = require('../models/Order');
 const ArtistProfile = require('../models/ArtistProfile');
 const User = require('../models/User');
 const Review = require('../models/Review');
 const { auth } = require('../middleware/auth');
+const { checkPaymentInfoRequired } = require('../middleware/checkPaymentInfo');
 const upload = require('../middleware/upload');
 const { generateSHA256Hash, generateNormalizedSHA256Hash, generatePerceptualHash, calculateHashSimilarity } = require('../utils/imageHash');
 const { detectWatermarkedText } = require('../utils/textDetection');
@@ -35,10 +37,110 @@ const normalizeArtworkImages = (req, artwork) => {
   const data = artwork.toObject ? artwork.toObject() : { ...artwork };
   const imgUrl = data.image_url || data.watermarked_image_url || data.watermarkedImage;
   const watermarkedUrl = data.watermarked_image_url || data.watermarkedImage || data.image_url;
+  const originalUrl = data.original_image_url || data.originalImage || imgUrl;
   data.image_url = toAbsoluteUrl(req, imgUrl);
   data.watermarked_image_url = toAbsoluteUrl(req, watermarkedUrl);
+  data.original_image_url = toAbsoluteUrl(req, originalUrl);
   if (!data.image_url) data.image_url = data.watermarked_image_url;
+  const rawArtistId = data.artist_id?._id || data.artist_id;
+  const rawGalleryId = data.gallery_id?._id || data.gallery_id || null;
+  data.artistId = rawArtistId || data.artistId || null;
+  data.galleryId = rawGalleryId || data.galleryId || null;
+  data.gallery_slug = data.gallery_slug || data.gallerySlug || data.gallery_id?.slug || '';
+  data.gallery_name = data.gallery_name || data.galleryName || data.gallery_id?.name || '';
+  data.frameStyle = data.frameStyle || 'classic';
   return data;
+};
+
+const normalizeGalleryToken = (value) => String(value || '')
+  .trim()
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, '-')
+  .replace(/^-+|-+$/g, '');
+
+const humanizeGalleryName = (value) => {
+  const text = String(value || '').trim().replace(/[_-]+/g, ' ');
+  return text.replace(/\s+/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase()) || 'Gallery';
+};
+
+const hashToken = (value) => Array.from(String(value || '')).reduce(
+  (sum, character) => sum + character.charCodeAt(0),
+  0
+);
+
+const pickThemeKey = (slug) => {
+  const normalized = normalizeGalleryToken(slug);
+  if (normalized.includes('nature') || normalized.includes('garden') || normalized.includes('forest')) return 'nature';
+  if (normalized.includes('abstract') || normalized.includes('color')) return 'abstract';
+  if (normalized.includes('crypto') || normalized.includes('neon')) return 'crypto';
+  if (normalized.includes('round') || normalized.includes('circle')) return 'round';
+  if (normalized.includes('showcase') || normalized.includes('presentation')) return 'showcase';
+  if (normalized.includes('classic') || normalized.includes('heritage')) return 'classic';
+  const themes = ['modern', 'nature', 'abstract', 'classic', 'crypto', 'round', 'showcase'];
+  return themes[hashToken(normalized) % themes.length];
+};
+
+const pickFrameStyle = (themeKey) => {
+  if (themeKey === 'nature') return 'floating';
+  if (themeKey === 'crypto') return 'modern';
+  if (themeKey === 'abstract') return 'minimal';
+  if (themeKey === 'round') return 'modern';
+  if (themeKey === 'showcase') return 'classic';
+  return 'classic';
+};
+
+const resolveGalleryAssignment = async (artistId, payload = {}) => {
+  const explicitGalleryId = payload.gallery_id && mongoose.Types.ObjectId.isValid(payload.gallery_id)
+    ? payload.gallery_id
+    : null;
+
+  if (explicitGalleryId) {
+    const galleryDoc = await Gallery.findById(explicitGalleryId).lean();
+    if (galleryDoc) {
+      const themeKey = galleryDoc.theme_key || pickThemeKey(galleryDoc.slug || galleryDoc.name);
+      return {
+        galleryId: galleryDoc._id,
+        galleryName: galleryDoc.name,
+        gallerySlug: galleryDoc.slug,
+        themeKey,
+        frameStyle: payload.frameStyle || pickFrameStyle(themeKey),
+      };
+    }
+  }
+
+  const rawGalleryName = payload.gallery_name
+    || payload.galleryName
+    || payload.gallery_slug
+    || payload.gallerySlug
+    || payload.gallery
+    || payload.collection
+    || payload.category
+    || 'featured-gallery';
+  const gallerySlug = normalizeGalleryToken(rawGalleryName);
+  const galleryName = payload.gallery_name || payload.galleryName || humanizeGalleryName(rawGalleryName);
+  const themeKey = pickThemeKey(gallerySlug);
+
+  let galleryDoc = await Gallery.findOne({ artist_id: artistId, slug: gallerySlug });
+  if (!galleryDoc) {
+    galleryDoc = await Gallery.create({
+      artist_id: artistId,
+      name: galleryName,
+      slug: gallerySlug,
+      description: payload.gallery_description || payload.galleryDescription || '',
+      theme_key: themeKey,
+      model_key: payload.model_key || payload.modelKey || 'vr_gallery',
+      is_default: Boolean(payload.is_default || payload.isDefault),
+      layout: payload.layout || {},
+    });
+  }
+
+  return {
+    galleryId: galleryDoc._id,
+    galleryName: galleryDoc.name,
+    gallerySlug: galleryDoc.slug,
+    themeKey: galleryDoc.theme_key || themeKey,
+    frameStyle: payload.frameStyle || pickFrameStyle(galleryDoc.theme_key || themeKey),
+  };
 };
 
 // Public route to get all published artworks (no auth required)
@@ -284,7 +386,8 @@ router.get('/', auth, async (req, res) => {
     console.log('Artwork query:', query);
     const artworks = await Artwork.find(query)
       .select('-original_image_url -originalImage -originalImagePath')
-      .populate('artist_id', 'full_name');
+      .populate('artist_id', 'full_name')
+      .populate('gallery_id', 'name slug description theme_key model_key cover_image layout display_order is_default');
     console.log('Found artworks:', artworks.length);
     res.json(artworks.map(artwork => normalizeArtworkImages(req, artwork)));
   } catch (error) {
@@ -310,6 +413,7 @@ router.get('/my-artworks', auth, async (req, res) => {
     const artworks = await Artwork.find(query)
       .select('-original_image_url -originalImage -originalImagePath')
       .populate('artist_id', 'full_name')
+      .populate('gallery_id', 'name slug description theme_key model_key cover_image layout display_order is_default')
       .sort({ created_at: -1 })
       .lean();
     console.log('Found my artworks:', artworks.length);
@@ -344,7 +448,8 @@ router.get('/:id', auth, async (req, res) => {
   try {
     const artwork = await Artwork.findById(req.params.id)
       .select('-original_image_url -originalImage -originalImagePath')
-      .populate('artist_id', 'full_name');
+      .populate('artist_id', 'full_name')
+      .populate('gallery_id', 'name slug description theme_key model_key cover_image layout display_order is_default');
     if (!artwork) {
       return res.status(404).json({ message: 'Artwork not found' });
     }
@@ -395,6 +500,7 @@ router.post('/', auth, [
 
     const artistProfile = await ArtistProfile.findOne({ user_id: req.user._id });
     let artistId = artistProfile?._id;
+    const galleryContext = await resolveGalleryAssignment(req.user._id, req.body);
 
     // If no artist profile exists, use user ID directly
     if (!artistProfile) {
@@ -466,6 +572,10 @@ router.post('/', auth, [
     const artwork = new Artwork({
       ...req.body,
       artist_id: artistId,
+      gallery_id: galleryContext.galleryId,
+      gallery_name: galleryContext.galleryName,
+      gallery_slug: galleryContext.gallerySlug,
+      frameStyle: req.body.frameStyle || galleryContext.frameStyle,
       imageHash,
       sha256Hash,
       perceptualHash,
@@ -477,6 +587,7 @@ router.post('/', auth, [
     // Only populate and update count if artist profile exists
     if (artistProfile) {
       await artwork.populate('artist_id', 'full_name');
+      await artwork.populate('gallery_id', 'name slug description theme_key model_key cover_image layout display_order is_default');
       // Update artist's artworks_sold count
       await ArtistProfile.findByIdAndUpdate(artistProfile._id, {
         $inc: { artworks_sold: 1 }
@@ -484,6 +595,7 @@ router.post('/', auth, [
     } else {
       // Populate with user full_name if no artist profile
       await artwork.populate('artist_id', 'full_name');
+      await artwork.populate('gallery_id', 'name slug description theme_key model_key cover_image layout display_order is_default');
     }
 
     res.status(201).json(artwork);
@@ -538,10 +650,22 @@ router.put('/:id', auth, [
 
     const updates = req.body;
     updates.updated_at = new Date();
+    if (typeof updates.price !== 'undefined') {
+      updates.base_price = updates.price;
+    }
+
+    if (updates.gallery_id || updates.gallery_slug || updates.gallerySlug || updates.gallery_name || updates.galleryName || updates.gallery || updates.collection || updates.category) {
+      const galleryContext = await resolveGalleryAssignment(req.user._id, updates);
+      updates.gallery_id = galleryContext.galleryId;
+      updates.gallery_name = galleryContext.galleryName;
+      updates.gallery_slug = galleryContext.gallerySlug;
+      updates.frameStyle = updates.frameStyle || galleryContext.frameStyle;
+    }
 
     const updatedArtwork = await Artwork.findByIdAndUpdate(req.params.id, updates, { new: true })
       .select('-original_image_url -originalImage -originalImagePath')
-      .populate('artist_id', 'full_name');
+      .populate('artist_id', 'full_name')
+      .populate('gallery_id', 'name slug description theme_key model_key cover_image layout display_order is_default');
     res.json(updatedArtwork);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -618,7 +742,7 @@ router.delete('/:id', auth, async (req, res) => {
 });
 
 // Upload artwork with image
-router.post('/upload', auth, upload.artworkUpload.single('image'), async (req, res) => {
+router.post('/upload', auth, checkPaymentInfoRequired, upload.artworkUpload.single('image'), async (req, res) => {
   console.log('Upload request received');
   console.log('User:', req.user);
   console.log('Body:', req.body);
@@ -743,6 +867,7 @@ router.post('/upload', auth, upload.artworkUpload.single('image'), async (req, r
 
     // === GENERATE WATERMARKED PREVIEW ===
     const artistName = artistProfile?.artist_name || req.user.full_name || 'Artist';
+    const galleryContext = await resolveGalleryAssignment(req.user._id, req.body);
     const signatureText = req.body.signatureText || artistName;
     const signatureRelativePath = req.user.signatureImage;
     const signatureAbsolutePath = signatureRelativePath
@@ -783,6 +908,7 @@ router.post('/upload', auth, upload.artworkUpload.single('image'), async (req, r
       description: req.body.description || '',
       category: req.body.category,
       price: parseFloat(req.body.price),
+      base_price: parseFloat(req.body.price),
       width: req.body.width ? parseFloat(req.body.width) : null,
       height: req.body.height ? parseFloat(req.body.height) : null,
       dimension_unit: req.body.dimension_unit || 'cm',
@@ -795,6 +921,10 @@ router.post('/upload', auth, upload.artworkUpload.single('image'), async (req, r
       sha256Hash: sha256Hash,
       perceptualHash: perceptualHash,
       artist_id: artistId,
+      gallery_id: galleryContext.galleryId,
+      gallery_name: galleryContext.galleryName,
+      gallery_slug: galleryContext.gallerySlug,
+      frameStyle: req.body.frameStyle || galleryContext.frameStyle,
       isPublic: true,
       status: 'published'
     });
@@ -805,6 +935,7 @@ router.post('/upload', auth, upload.artworkUpload.single('image'), async (req, r
     // Only populate and update count if artist profile exists
     if (artistProfile) {
       await artwork.populate('artist_id', 'full_name');
+      await artwork.populate('gallery_id', 'name slug description theme_key model_key cover_image layout display_order is_default');
       // Update artist's artworks_sold count
       await ArtistProfile.findByIdAndUpdate(artistProfile._id, {
         $inc: { artworks_sold: 1 }
@@ -812,6 +943,7 @@ router.post('/upload', auth, upload.artworkUpload.single('image'), async (req, r
     } else {
       // Populate with user full_name if no artist profile
       await artwork.populate('artist_id', 'full_name');
+      await artwork.populate('gallery_id', 'name slug description theme_key model_key cover_image layout display_order is_default');
     }
 
     console.log('Artwork saved successfully');

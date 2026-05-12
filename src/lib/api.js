@@ -8,12 +8,10 @@ class ApiClient {
   }
 
   setToken(token) {
-    console.log('API: Setting token:', token ? '***' : 'null');
     this.token = token;
   }
 
   clearToken() {
-    console.log('API: Clearing token');
     this.token = null;
   }
 
@@ -55,6 +53,40 @@ class ApiClient {
     return response;
   }
 
+  async sendOtp(data) {
+    return this.request('/auth/send-otp', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async verifyOtp(data) {
+    const response = await this.request('/auth/verify-otp', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+
+    if (response?.token) {
+      this.setToken(response.token);
+    }
+
+    return response;
+  }
+
+  async resendOtp(data) {
+    return this.request('/auth/resend-otp', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async forgotPasswordOtp(email) {
+    return this.request('/auth/forgot-password-otp', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  }
+
   async login(credentials) {
     const response = await this.request('/auth/login', {
       method: 'POST',
@@ -78,11 +110,20 @@ class ApiClient {
     });
   }
 
+  async resetPasswordWithOtp(data) {
+    return this.request('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   async logout() {
     try {
       await this.request('/auth/logout', { method: 'POST' });
     } catch (error) {
-      console.error('Logout API error:', error);
+      if (import.meta.env.DEV) {
+        console.error('Logout API error:', error);
+      }
     } finally {
       this.clearToken();
     }
@@ -219,8 +260,7 @@ class ApiClient {
     if (this.token) {
       try {
         return await this.request('/artists');
-      // eslint-disable-next-line no-unused-vars
-      } catch (_) { /* empty */ }
+      } catch {}
     }
     const err = await res.json().catch(() => ({ message: 'Failed to load artists' }));
     throw new Error(err.message || `Failed to load artists (${res.status})`);
@@ -228,6 +268,14 @@ class ApiClient {
 
   async getArtist(id) {
     return this.request(`/artists/${id}`);
+  }
+
+  async getArtistVrGalleries(artistId) {
+    return this.request(`/artists/${artistId}/vr-galleries`);
+  }
+
+  async getArtistVrGallery(artistId, gallerySlug) {
+    return this.request(`/artists/${artistId}/vr-galleries/${encodeURIComponent(gallerySlug)}`);
   }
 
   // Artwork endpoints
@@ -391,6 +439,31 @@ class ApiClient {
     });
   }
 
+  async createRazorpayCheckout(data) {
+    return this.request('/razorpay/create-order', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async verifyRazorpayPayment(data) {
+    return this.request('/razorpay/verify', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async markRazorpayCheckoutFailed(data) {
+    return this.request('/razorpay/fail', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getArtistWallet() {
+    return this.request('/razorpay/wallet');
+  }
+
   // Review endpoints
   async getReviewsForArtwork(artworkId) {
     return this.request(`/reviews/artwork/${artworkId}`);
@@ -496,6 +569,36 @@ class ApiClient {
     return this.request('/address/get');
   }
 
+  async updateAddress(addressId, addressData) {
+    return this.request(`/address/update/${addressId}`, {
+      method: 'PUT',
+      body: JSON.stringify(addressData),
+    });
+  }
+
+  async deleteAddress(addressId) {
+    return this.request(`/address/delete/${addressId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async setDefaultAddress(addressId) {
+    return this.request(`/address/default/${addressId}`, {
+      method: 'PUT',
+    });
+  }
+
+  async getBuyerPaymentPreferences() {
+    return this.request('/profiles/me/payment-preferences');
+  }
+
+  async updateBuyerPaymentPreferences(data) {
+    return this.request('/profiles/me/payment-preferences', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
   // Admin endpoints
   async getAllUsersAdmin() {
     return this.request('/admin/users');
@@ -511,6 +614,29 @@ class ApiClient {
 
   async getAllReviewsAdmin() {
     return this.request('/admin/reviews');
+  }
+
+  // Payment endpoints
+  async getPaymentInfo() {
+    return this.request('/payment/info');
+  }
+
+  async updatePaymentInfo(data) {
+    return this.request('/payment/update', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async checkPaymentStatus() {
+    return this.request('/payment/check-status');
+  }
+
+  // Museum endpoints
+  async getMuseumData({ artistId = '' } = {}) {
+    const q = artistId ? { artistId } : {};
+    const query = new URLSearchParams(q).toString();
+    return this.request(`/museum/data${query ? `?${query}` : ''}`);
   }
 }
 

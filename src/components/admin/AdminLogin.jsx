@@ -18,9 +18,7 @@ const AdminLogin = () => {
     setError('');
 
     try {
-      console.log('Attempting admin login...');
       const response = await login({ email, password });
-      console.log('Login response:', response);
 
       if (!response || !response.user) {
         throw new Error('Invalid login response');
@@ -30,7 +28,6 @@ const AdminLogin = () => {
         throw new Error('Access denied. Admin privileges required.');
       }
 
-      console.log('Login successful, navigating to admin dashboard...');
       navigate('/admin/overview');
     } catch (error) {
       console.error('Admin login error:', error);
@@ -43,7 +40,6 @@ const AdminLogin = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center p-4">
       <div className="max-w-md w-full">
-        {/* Header */}
         <div className="text-center mb-8">
           <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
             <Shield className="h-8 w-8 text-white" />
@@ -52,7 +48,6 @@ const AdminLogin = () => {
           <p className="text-gray-600">Access the administration panel</p>
         </div>
 
-        {/* Login Form */}
         <div className="bg-white rounded-xl shadow-lg p-8">
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
@@ -119,7 +114,6 @@ const AdminLogin = () => {
             </button>
           </form>
 
-          {/* Forgot Password Link */}
           <div className="mt-4 text-center">
             <button
               type="button"
@@ -130,15 +124,14 @@ const AdminLogin = () => {
             </button>
           </div>
 
-          {/* Back Button */}
           <div className="mt-6 text-center">
-          <button
-            onClick={() => navigate('/')}
-            className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-800 transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Home
-          </button>
+            <button
+              onClick={() => navigate('/')}
+              className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-800 transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Home
+            </button>
           </div>
         </div>
 

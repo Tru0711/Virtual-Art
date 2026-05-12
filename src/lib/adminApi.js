@@ -1,6 +1,9 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api';
+const rawBaseUrl = import.meta.env.VITE_API_URL;
+const API_BASE_URL = rawBaseUrl
+  ? (rawBaseUrl.endsWith('/api') ? rawBaseUrl : `${rawBaseUrl}/api`)
+  : '/api';
 
 const adminClient = axios.create({
   baseURL: API_BASE_URL,
@@ -27,7 +30,10 @@ export const adminApi = {
   getUsers: () => unwrap(adminClient.get('/admin/users')),
   getArtworks: () => unwrap(adminClient.get('/admin/artworks')),
   getOrders: () => unwrap(adminClient.get('/admin/orders')),
+  getPaymentTransactions: () => unwrap(adminClient.get('/admin/payment-transactions')),
   getReviews: () => unwrap(adminClient.get('/admin/reviews')),
+  updateUser: (userId, payload) => unwrap(adminClient.put(`/admin/users/${userId}`, payload)),
+  deleteUser: (userId) => unwrap(adminClient.delete(`/admin/users/${userId}`)),
   approveArtwork: (artworkId) => unwrap(adminClient.post(`/admin/artworks/${artworkId}/approve`)),
   rejectArtwork: (artworkId, reason) => unwrap(adminClient.post(`/admin/artworks/${artworkId}/reject`, { reason })),
   updateDeliveryStatus: (orderId, delivery_status) => unwrap(adminClient.put(`/orders/${orderId}/delivery`, { delivery_status }))

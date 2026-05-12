@@ -8,10 +8,7 @@ const ProtectedArtistRoute = ({ children }) => {
   const { profile, loading } = useAuth();
   const location = useLocation();
 
-  console.log('ProtectedArtistRoute: Checking access...', { profile, loading, pathname: location.pathname });
-
   if (loading) {
-    console.log('ProtectedArtistRoute: Still loading...');
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -23,16 +20,13 @@ const ProtectedArtistRoute = ({ children }) => {
   }
 
   if (!profile) {
-    console.log('ProtectedArtistRoute: Not logged in, redirecting to artist login');
     return <Navigate to="/artist/login" replace />;
   }
 
   if (profile.user_type !== 'artist') {
-    console.log('ProtectedArtistRoute: Not an artist, redirecting to home');
     return <Navigate to="/" replace />;
   }
 
-  console.log('ProtectedArtistRoute: Access granted, rendering children');
   return children;
 };
 

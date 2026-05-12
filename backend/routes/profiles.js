@@ -7,6 +7,8 @@ const upload = require('../middleware/upload');
 
 const router = express.Router();
 
+const maskPattern = /(^$)|(^[A-Za-z0-9*\s-]{4,40}$)/;
+
 // Get all profiles (public)
 router.get('/', auth, async (req, res) => {
   try {
@@ -117,6 +119,68 @@ router.delete('/:id', auth, async (req, res) => {
     }
 
     res.json({ message: 'User deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Buyer payment preferences (safe fields only)
+router.get('/me/payment-preferences', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select('payment_preferences user_type');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (user.user_type !== 'user') {
+      return res.status(403).json({ message: 'Only buyers can access payment preferences' });
+    }
+
+    res.json({
+      success: true,
+      payment_preferences: user.payment_preferences || {
+        preferred_method: '',
+        masked_identifier: '',
+        updated_at: null,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.put('/me/payment-preferences', auth, [
+  body('preferred_method').isIn(['UPI', 'Card', 'Net Banking', 'Wallet']).withMessage('Preferred method is invalid'),
+  body('masked_identifier')
+    .optional({ nullable: true })
+    .matches(maskPattern)
+    .withMessage('Masked identifier must be 4-40 safe characters'),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (user.user_type !== 'user') {
+      return res.status(403).json({ message: 'Only buyers can update payment preferences' });
+    }
+
+    const { preferred_method, masked_identifier = '' } = req.body;
+
+    user.payment_preferences = {
+      preferred_method,
+      masked_identifier,
+      updated_at: new Date(),
+    };
+    await user.save();
+
+    res.json({ success: true, message: 'Payment preferences updated', payment_preferences: user.payment_preferences });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

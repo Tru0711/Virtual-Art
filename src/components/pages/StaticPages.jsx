@@ -35,6 +35,33 @@ export const AboutPage = () => (
             artist or an established collector, we're here to support your artistic journey.
           </p>
         </div>
+
+        {/* Attribution Section */}
+        <div className="mt-12 pt-8 border-t border-gray-200">
+          <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-lg p-6">
+            <p className="text-sm text-gray-600 leading-relaxed mb-4">
+              VR Gallery environment/model used in this project is licensed under Creative Commons Attribution 4.0 International (CC BY 4.0).
+            </p>
+            <p className="text-sm text-gray-600 leading-relaxed mb-4">
+              Original resource creators retain ownership of their work.
+            </p>
+            <p className="text-sm text-gray-600 leading-relaxed mb-4">
+              This project uses modified/adapted gallery assets under the CC BY 4.0 license:
+              <br />
+              <a 
+                href="https://creativecommons.org/licenses/by/4.0/" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-amber-600 hover:text-amber-700 underline font-medium transition-colors"
+              >
+                https://creativecommons.org/licenses/by/4.0/
+              </a>
+            </p>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              Changes may have been made to optimize and integrate the gallery into the VisualArt VR marketplace project.
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   </div>

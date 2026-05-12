@@ -9,13 +9,9 @@ import ArtworksSection from './ArtworksSection';
 import TransactionsSection from './TransactionsSection';
 import ReviewsSection from './ReviewsSection';
 import AnalyticsSection from './AnalyticsSection';
-import ExhibitionsSection from './ExhibitionsSection';
-import CertificatesSection from './CertificatesSection';
-import ARVRSection from './ARVRSection';
-import AIInsightsSection from './AIInsightsSection';
-import NotificationsSection from './NotificationsSection';
 import SettingsSection from './SettingsSection';
-import MaintenanceSection from './MaintenanceSection';
+// Note: non-essential admin sections (Exhibitions, Certificates, AR/VR, AI Insights,
+// Notifications, Maintenance) are intentionally not imported to declutter the admin UI.
 
 const AdminDashboard = () => {
   const { profile } = useAuth();
@@ -41,6 +37,11 @@ const AdminDashboard = () => {
   const [users, setUsers] = useState([]);
   const [artworks, setArtworks] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [paymentInsights, setPaymentInsights] = useState({
+    summary: { total_revenue: 0, total_commission_earned: 0, total_failed_payments: 0 },
+    recent_transactions: [],
+    failed_payments: [],
+  });
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [overviewLoading, setOverviewLoading] = useState(false);
@@ -108,8 +109,16 @@ const AdminDashboard = () => {
       }
 
       if (section === 'transactions') {
-        const ordersRes = await adminApi.getOrders();
+        const [ordersRes, paymentRes] = await Promise.all([
+          adminApi.getOrders(),
+          adminApi.getPaymentTransactions(),
+        ]);
         setOrders(ordersRes);
+        setPaymentInsights(paymentRes || {
+          summary: { total_revenue: 0, total_commission_earned: 0, total_failed_payments: 0 },
+          recent_transactions: [],
+          failed_payments: [],
+        });
       }
 
       if (section === 'reviews') {
@@ -230,7 +239,7 @@ const AdminDashboard = () => {
           />
         );
       case 'users':
-        return <UsersSection users={users} />;
+        return <UsersSection users={users} onUsersUpdated={() => fetchSectionData('users', false)} />;
       case 'artworks':
         return (
           <ArtworksSection
@@ -239,26 +248,20 @@ const AdminDashboard = () => {
             onReject={handleRejectArtwork}
           />
         );
-      case 'exhibitions':
-        return <ExhibitionsSection />;
       case 'transactions':
-        return <TransactionsSection orders={orders} onOrdersUpdated={() => fetchSectionData('transactions', false)} />;
+        return (
+          <TransactionsSection
+            orders={orders}
+            paymentInsights={paymentInsights}
+            onOrdersUpdated={() => fetchSectionData('transactions', false)}
+          />
+        );
       case 'reviews':
         return <ReviewsSection reviews={reviews} />;
-      case 'certificates':
-        return <CertificatesSection />;
-      case 'arvr':
-        return <ARVRSection />;
-      case 'ai-insights':
-        return <AIInsightsSection />;
       case 'analytics':
         return <AnalyticsSection />;
-      case 'notifications':
-        return <NotificationsSection />;
       case 'settings':
-        return <SettingsSection />;
-      case 'maintenance':
-        return <MaintenanceSection />;
+        return <SettingsSection onUsersUpdated={() => fetchSectionData('users', false)} />;
       default:
         return (
           <OverviewSection

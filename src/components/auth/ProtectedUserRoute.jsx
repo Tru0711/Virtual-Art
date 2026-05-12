@@ -6,10 +6,7 @@ const ProtectedUserRoute = ({ children }) => {
   const { profile, loading } = useAuth();
   const location = useLocation();
 
-  console.log('ProtectedUserRoute: Checking access...', { profile, loading, pathname: location.pathname });
-
   if (loading) {
-    console.log('ProtectedUserRoute: Still loading...');
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -21,11 +18,9 @@ const ProtectedUserRoute = ({ children }) => {
   }
 
   if (profile && profile.user_type !== 'user') {
-    console.log('ProtectedUserRoute: Not a user, redirecting to home');
     return <Navigate to="/" replace />;
   }
 
-  console.log('ProtectedUserRoute: Access granted, rendering children');
   return children;
 };
 

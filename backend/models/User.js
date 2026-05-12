@@ -44,6 +44,21 @@ const userSchema = new mongoose.Schema({
   tokenVersion: {
     type: Number,
     default: 0
+  },
+  payment_preferences: {
+    preferred_method: {
+      type: String,
+      enum: ['UPI', 'Card', 'Net Banking', 'Wallet', ''],
+      default: ''
+    },
+    masked_identifier: {
+      type: String,
+      default: ''
+    },
+    updated_at: {
+      type: Date,
+      default: null
+    }
   }
 });
 

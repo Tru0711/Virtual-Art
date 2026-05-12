@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
   Mail,
   Phone,
-  MapPin,
   Edit,
   Heart,
   Star,
@@ -13,7 +12,9 @@ import {
   ChevronRight,
   Save,
   Camera,
+  CreditCard,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../lib/api';
 import { toastSuccess, toastError } from '../../lib/toast';
@@ -217,6 +218,7 @@ const UserProfile = () => {
   const sidebarItems = [
     { id: 'account', label: 'Account Settings', icon: Settings },
     { id: 'stuff', label: 'My Stuff', icon: Heart },
+    { id: 'payment-preferences', label: 'Payment Preferences', icon: CreditCard },
   ];
 
   return (
@@ -468,6 +470,26 @@ const UserProfile = () => {
                             alt="Preview"
                             className="w-12 h-12 rounded-full object-cover border-2 border-gray-300"
                           />
+                        )}
+
+                        {activeSection === 'addresses' && (
+                          <div className="space-y-4">
+                            <h1 className="text-2xl font-bold text-gray-800">Saved Addresses</h1>
+                            <p className="text-gray-600">Manage your delivery addresses and set a default address for faster checkout.</p>
+                            <Link to="/user/saved-addresses" className="inline-flex items-center px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700">
+                              Open Saved Addresses
+                            </Link>
+                          </div>
+                        )}
+
+                        {activeSection === 'payment-preferences' && (
+                          <div className="space-y-4">
+                            <h1 className="text-2xl font-bold text-gray-800">Payment Preferences</h1>
+                            <p className="text-gray-600">Save your preferred method and optional masked identifier for quicker Razorpay checkout.</p>
+                            <Link to="/user/payment-preferences" className="inline-flex items-center px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700">
+                              Open Payment Preferences
+                            </Link>
+                          </div>
                         )}
                       </div>
                     </div>

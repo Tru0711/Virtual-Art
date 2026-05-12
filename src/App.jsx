@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext.jsx';
+import { SocketProvider } from './contexts/SocketContext.jsx';
 import { Toaster } from 'react-hot-toast';
 
 // Layout Components
@@ -14,11 +15,13 @@ import Settings from './components/pages/Settings.jsx';
 import PublicArtistProfile from './components/pages/PublicArtistProfile.jsx';
 import NotFound from './components/pages/NotFound.jsx';
 import { AboutPage, ContactPage, HelpPage, TermsPage, PrivacyPage } from './components/pages/StaticPages.jsx';
+import VRMuseum from './components/pages/VRMuseum.jsx';
 
 // Auth Components
 import LoginSelect from './components/auth/LoginSelect.jsx';
 import UserAuth from './components/auth/UserAuth.jsx';
 import ForgotPassword from './components/auth/ForgotPassword.jsx';
+import OtpVerification from './components/auth/OtpVerification.jsx';
 import ResetPassword from './components/auth/ResetPassword.jsx';
 import ProtectedUserRoute from './components/auth/ProtectedUserRoute.jsx';
 
@@ -33,6 +36,7 @@ import ArtistProfileDashboard from './components/artist/ArtistProfileDashboard.j
 import EditArtistProfile from './components/artist/EditArtistProfile.jsx';
 import Artists from './components/artist/Artists.jsx';
 import ArtistsPage from './components/artist/ArtistsPage.jsx';
+import PaymentSettings from './components/artist/PaymentSettings.jsx';
 import ProtectedArtistRoute from './components/artist/ProtectedArtistRoute.jsx';
 
 // Buyer Components
@@ -41,21 +45,36 @@ import UserDashboard from './components/buyer/UserDashboard.jsx';
 import Cart from './components/buyer/Cart.jsx';
 import MyOrders from './components/buyer/MyOrders.jsx';
 import MyPurchases from './components/buyer/MyPurchases.jsx';
+import PaymentSuccess from './components/buyer/PaymentSuccess.jsx';
+import PaymentFailed from './components/buyer/PaymentFailed.jsx';
+import SavedAddresses from './components/buyer/SavedAddresses.jsx';
+import PaymentPreferences from './components/buyer/PaymentPreferences.jsx';
+import Checkout from './components/buyer/Checkout.jsx';
 
 // Artwork Components
 import ArtworkDetails from './components/artworks/ArtworkDetails.jsx';
-import ARView from './components/artworks/ARView.jsx';
-import WebcamAR from './components/artworks/WebcamAR.jsx';
-import Desktop3DPreview from './components/artworks/Desktop3DPreview.jsx';
-import MobileAR from './components/artworks/MobileAR.jsx';
 
 // Admin - Other
 import AddAddress from './components/buyer/AddAddress.jsx';
 
+const ARView = lazy(() => import('./components/artworks/ARView.jsx'));
+const WebcamAR = lazy(() => import('./components/artworks/WebcamAR.jsx'));
+const Desktop3DPreview = lazy(() => import('./components/artworks/Desktop3DPreview.jsx'));
+const MobileAR = lazy(() => import('./components/artworks/MobileAR.jsx'));
+const VRGallery = lazy(() => import('./components/pages/VRGallery.jsx'));
+const VRGallerySelection = lazy(() => import('./components/pages/VRGallerySelection.jsx'));
+
+const immersiveRouteLoader = (
+  <div className="min-h-screen bg-black text-white flex items-center justify-center px-4">
+    <p className="text-sm">Loading immersive experience...</p>
+  </div>
+);
+
 function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
+    <SocketProvider>
+      <AuthProvider>
+        <BrowserRouter>
         <Routes>
           {/* Public Routes with Navbar and Footer */}
           <Route path="/" element={
@@ -96,6 +115,8 @@ function App() {
           <Route path="/artist/login" element={<ArtistAuth />} />
           <Route path="/buyer/login" element={<UserAuth />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/verify-otp" element={<OtpVerification />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/reset-password/:token" element={<ResetPassword />} />
 
           {/* Admin Routes */}
@@ -126,6 +147,11 @@ function App() {
               </>
             </ProtectedArtistRoute>
           } />
+          <Route path="/artist/payment-settings" element={
+            <ProtectedArtistRoute>
+              <PaymentSettings />
+            </ProtectedArtistRoute>
+          } />
 
           {/* User/Buyer Protected Routes */}
           <Route path="/user/dashboard" element={
@@ -151,6 +177,47 @@ function App() {
               <>
                 <Navbar />
                 <Cart />
+                <Footer onNavigate={(page) => window.location.href = `/${page}`} />
+              </>
+            </ProtectedUserRoute>
+          } />
+          <Route path="/payment-success" element={
+            <ProtectedUserRoute>
+              <PaymentSuccess />
+            </ProtectedUserRoute>
+          } />
+          <Route path="/payment-failed" element={
+            <ProtectedUserRoute>
+              <PaymentFailed />
+            </ProtectedUserRoute>
+          } />
+          <Route path="/checkout" element={
+            <ProtectedUserRoute>
+              <>
+                <Navbar />
+                <Checkout />
+                <Footer onNavigate={(page) => window.location.href = `/${page}`} />
+              </>
+            </ProtectedUserRoute>
+          } />
+          <Route path="/user/saved-addresses" element={
+            <ProtectedUserRoute>
+              <>
+                <Navbar />
+                <div className="max-w-6xl mx-auto px-4 py-8">
+                  <SavedAddresses />
+                </div>
+                <Footer onNavigate={(page) => window.location.href = `/${page}`} />
+              </>
+            </ProtectedUserRoute>
+          } />
+          <Route path="/user/payment-preferences" element={
+            <ProtectedUserRoute>
+              <>
+                <Navbar />
+                <div className="max-w-6xl mx-auto px-4 py-8">
+                  <PaymentPreferences />
+                </div>
                 <Footer onNavigate={(page) => window.location.href = `/${page}`} />
               </>
             </ProtectedUserRoute>
@@ -193,24 +260,24 @@ function App() {
           } />
           {/* AR experience routes - now public for all users */}
           <Route path="/ar-preview/:id" element={
-            <>
+            <Suspense fallback={immersiveRouteLoader}>
               <ARView />
-            </>
+            </Suspense>
           } />
           <Route path="/ar-webcam/:artworkId" element={
-            <>
+            <Suspense fallback={immersiveRouteLoader}>
               <WebcamAR />
-            </>
+            </Suspense>
           } />
           <Route path="/ar-3d-preview/:artworkId" element={
-            <>
+            <Suspense fallback={immersiveRouteLoader}>
               <Desktop3DPreview />
-            </>
+            </Suspense>
           } />
           <Route path="/ar-mobile/:artworkId" element={
-            <>
+            <Suspense fallback={immersiveRouteLoader}>
               <MobileAR />
-            </>
+            </Suspense>
           } />
           <Route path="/search" element={
             <>
@@ -237,6 +304,37 @@ function App() {
               </>
             </ProtectedUserRoute>
           } />
+          <Route path="/vr-gallery/:artistId/:galleryId" element={
+            <ProtectedUserRoute>
+              <Suspense fallback={immersiveRouteLoader}>
+                <VRGallery />
+              </Suspense>
+            </ProtectedUserRoute>
+          } />
+          <Route path="/vr-gallery/:artistId" element={
+            <ProtectedUserRoute>
+              <Suspense fallback={immersiveRouteLoader}>
+                <VRGallery />
+              </Suspense>
+            </ProtectedUserRoute>
+          } />
+          <Route path="/vr-galleries/:artistId" element={
+            <ProtectedUserRoute>
+              <Suspense fallback={immersiveRouteLoader}>
+                <VRGallerySelection />
+              </Suspense>
+            </ProtectedUserRoute>
+          } />
+
+          {/* One big VR museum */}
+          <Route path="/vr-museum/:artistId" element={
+            <ProtectedUserRoute>
+              <Suspense fallback={immersiveRouteLoader}>
+                {/** lazy not used to keep it simple */}
+                <VRMuseum />
+              </Suspense>
+            </ProtectedUserRoute>
+          } />
 
           {/* 404 Not Found */}
           <Route path="*" element={<NotFound />} />
@@ -244,6 +342,7 @@ function App() {
         <Toaster />
       </BrowserRouter>
     </AuthProvider>
+    </SocketProvider>
   );
 }
 

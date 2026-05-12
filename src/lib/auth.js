@@ -15,13 +15,12 @@ export const logout = async () => {
 export const getCurrentUser = async () => {
   try {
     return await api.getCurrentUser();
-  } catch (error) {
+  } catch {
     return null;
   }
 };
 
 export const getCurrentProfile = async () => {
-  console.log('Auth: Getting current profile');
   return getCurrentUser();
 };
 

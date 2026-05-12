@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { User, Mail, Lock, Phone } from 'lucide-react';
-import { signup } from '../../lib/auth';
 import { useAuth } from '../../contexts/AuthContext';
+import { api } from '../../lib/api';
 
 const UserAuth = () => {
   const { login } = useAuth();
@@ -72,14 +72,22 @@ const UserAuth = () => {
     setLoading(true);
 
     try {
-      await signup({
+      const otpResponse = await api.sendOtp({
         email: signupData.email,
         password: signupData.password,
         full_name: signupData.full_name,
         user_type: 'user',
         phone: signupData.phone || undefined,
       });
-      navigate('/user/dashboard');
+
+      navigate('/verify-otp', {
+        state: {
+          email: signupData.email.trim().toLowerCase(),
+          purpose: 'signup',
+          expiresInSeconds: otpResponse?.expiresInSeconds,
+          cooldownSeconds: otpResponse?.cooldownSeconds,
+        },
+      });
     } catch (err) {
       setError(err.message || 'Signup failed');
     } finally {

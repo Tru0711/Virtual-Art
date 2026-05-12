@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import image1 from "../../assets/img1.png";
+import image1 from "../../assets/img4.png";
 
 export default function HeroSection() {
     const [imageLoaded, setImageLoaded] = useState(false);

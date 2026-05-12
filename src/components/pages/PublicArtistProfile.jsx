@@ -6,6 +6,7 @@ import { toastError, toastSuccess } from '../../lib/toast';
 // eslint-disable-next-line no-unused-vars
 import ArtworkCard from '../artworks/ArtworkCard';
 import { useAuth } from '../../contexts/AuthContext';
+import VREntryPopup from '../common/VREntryPopup';
 
 const PublicArtistProfile = () => {
   const { id } = useParams();
@@ -16,6 +17,8 @@ const PublicArtistProfile = () => {
   const [wishlist, setWishlist] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showVRPopup, setShowVRPopup] = useState(false);
+  const [selectedGalleryId, setSelectedGalleryId] = useState(null);
   
   // Email customization state
   const [showEmailForm, setShowEmailForm] = useState(false);
@@ -357,6 +360,17 @@ const PublicArtistProfile = () => {
               Visit Website
             </a>
           )}
+
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedGalleryId(null);
+              setShowVRPopup(true);
+            }}
+            className="bg-gradient-to-r from-slate-800 to-slate-900 hover:from-black hover:to-slate-800 text-white px-4 py-2 rounded-lg text-sm transition-all shadow-md hover:shadow-lg"
+          >
+            Enter VR Gallery
+          </button>
         </div>
       </section>
 
@@ -396,6 +410,13 @@ const PublicArtistProfile = () => {
       )}
 
       <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/js/all.min.js"></script>
+      
+      <VREntryPopup 
+        isOpen={showVRPopup}
+        artistId={id}
+        galleryId={selectedGalleryId}
+        onClose={() => setShowVRPopup(false)}
+      />
     </div>
   );
 };

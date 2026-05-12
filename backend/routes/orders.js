@@ -7,6 +7,37 @@ const ArtistProfile = require('../models/ArtistProfile');
 const { auth } = require('../middleware/auth');
 
 const router = express.Router();
+const buyerMarkupPercent = Number(process.env.BUYER_MARKUP_PERCENT || 10);
+const commissionPercent = Number(process.env.ADMIN_COMMISSION_PERCENT || 10);
+
+const calculateSplit = (baseAmount) => {
+  const base = Math.round(Number(baseAmount || 0));
+  const markupAmount = Math.round((base * buyerMarkupPercent) / 100);
+  const commissionAmount = Math.round((base * commissionPercent) / 100);
+  const buyerAmount = base + markupAmount;
+  const artistAmount = Math.max(0, base - commissionAmount);
+  const adminAmount = Math.max(0, buyerAmount - artistAmount);
+
+  return { base, markupAmount, commissionAmount, buyerAmount, artistAmount, adminAmount };
+};
+
+const resolveArtistProfile = async (artistReference) => {
+  if (!artistReference) {
+    return null;
+  }
+
+  if (artistReference.user_id) {
+    return artistReference;
+  }
+
+  const artistId = artistReference._id || artistReference;
+  const directProfile = await ArtistProfile.findById(artistId);
+  if (directProfile) {
+    return directProfile;
+  }
+
+  return ArtistProfile.findOne({ user_id: artistId });
+};
 
 // Get orders for artist - their artworks that have been ordered
 router.get('/artist', auth, async (req, res) => {
@@ -55,10 +86,12 @@ router.get('/', auth, async (req, res) => {
     } else if (req.user.user_type === 'artist') {
       // Artists can see orders for their artworks
       const artistProfile = await ArtistProfile.findOne({ user_id: req.user._id });
+      const artistIds = [req.user._id];
       if (artistProfile) {
-        const artistArtworks = await Artwork.find({ artist_id: artistProfile._id }).select('_id');
-        query.artwork_id = { $in: artistArtworks.map(a => a._id) };
+        artistIds.push(artistProfile._id);
       }
+      const artistArtworks = await Artwork.find({ artist_id: { $in: artistIds } }).select('_id');
+      query.artwork_id = { $in: artistArtworks.map(a => a._id) };
     } else {
       // Regular users can see their own orders
       query.user_id = req.user._id;
@@ -106,9 +139,11 @@ router.get('/:id', auth, async (req, res) => {
     }
 
     // Check if user can view this order
+    const orderArtistId = order.artist_id?._id || order.artist_id;
+    const canAccessAsArtist = orderArtistId && orderArtistId.toString() === req.user._id.toString();
     if (req.user.user_type !== 'admin' &&
         order.user_id._id.toString() !== req.user._id.toString() &&
-        order.artist_id._id.toString() !== req.user._id.toString()) {
+        !canAccessAsArtist) {
       return res.status(403).json({ message: 'Not authorized' });
     }
 
@@ -141,7 +176,7 @@ router.post('/', auth, async (req, res) => {
     if (!address || typeof address !== 'string') {
       return res.status(400).json({ success: false, message: 'Invalid address' });
     }
-    if (paymentMethod && paymentMethod !== 'stripe') {
+    if (paymentMethod && !['stripe', 'razorpay'].includes(paymentMethod)) {
       return res.status(400).json({ success: false, message: 'Invalid paymentMethod' });
     }
 
@@ -168,32 +203,41 @@ router.post('/', auth, async (req, res) => {
         return res.status(400).json({ success: false, message: 'Cannot order your own artwork' });
       }
 
-      totalAmount += artwork.price * item.quantity;
+      const split = calculateSplit((artwork.base_price ?? artwork.price) * item.quantity);
+      totalAmount += split.buyerAmount;
       orderItems.push({
         product: item.product,
-        quantity: item.quantity
+        quantity: item.quantity,
+        split,
       });
     }
-
-    // Add tax (2%)
-    totalAmount += Math.round(totalAmount * 2 / 100);
 
     // Create orders for each artwork (one order per artwork)
     const createdOrders = [];
     for (const item of orderItems) {
       const artwork = await Artwork.findById(item.product);
+      const artistProfile = await resolveArtistProfile(artwork.artist_id);
+      const artistUserId = artistProfile?.user_id || artwork.artist_id || null;
       
       const order = new Order({
         user_id: userId,
+        artist_id: artistUserId,
         artwork_id: item.product,
         quantity: item.quantity,
-        total_amount: (artwork.price * item.quantity) + Math.round((artwork.price * item.quantity) * 2 / 100),
+        total_amount: item.split.buyerAmount,
+        base_amount: item.split.base,
+        buyer_amount: item.split.buyerAmount,
+        commission_amount: item.split.commissionAmount,
+        artist_amount: item.split.artistAmount,
+        admin_amount: item.split.adminAmount,
         address: address,
         payment_type: paymentMethod ? 'Online' : 'COD',
+        payment_provider: paymentMethod || 'COD',
         payment_status: paymentMethod ? 'paid' : 'pending',
-        delivery_status: 'pending',
-        status: 'pending',
-        shipping_address: address
+        delivery_status: paymentMethod ? 'delivered' : 'pending',
+        status: paymentMethod ? 'completed' : 'pending',
+        shipping_address: address,
+        split_applied: Boolean(paymentMethod)
       });
 
       await order.save();
@@ -285,6 +329,28 @@ router.put('/:id', auth, [
       }
     }
 
+    // Emit socket update for this order
+    try {
+      const io = req.app?.locals?.io;
+      const payload = {
+        orderId: updatedOrder._id,
+        status: updatedOrder.status,
+        delivery_status: updatedOrder.delivery_status,
+        tracking_id: updatedOrder.tracking_id || updatedOrder.trackingId || null,
+        courier_name: updatedOrder.courier_name || null,
+        updated_at: updatedOrder.updated_at || new Date(),
+      };
+
+      if (io) {
+        // Room-based emit
+        io.to(`order:${String(updatedOrder._id)}`).emit('order.updated', payload);
+        // Global emit fallback
+        io.emit('order.updated', payload);
+      }
+    } catch (e) {
+      console.error('[ORDERS API] Socket emit failed:', e);
+    }
+
     res.json(updatedOrder);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -299,8 +365,11 @@ router.put('/:id/delivery', auth, async (req, res) => {
     }
 
     const { delivery_status } = req.body;
-    
-    if (!['pending', 'shipped', 'delivered'].includes(delivery_status)) {
+
+    const normalizedDeliveryStatus = String(delivery_status || '').trim().toLowerCase().replace(/\s+/g, '_');
+    const allowedDeliveryStatuses = ['pending', 'placed', 'processing', 'packed', 'shipped', 'out_for_delivery', 'delivered'];
+
+    if (!allowedDeliveryStatuses.includes(normalizedDeliveryStatus)) {
       return res.status(400).json({ success: false, message: 'Invalid delivery status' });
     }
 
@@ -310,10 +379,10 @@ router.put('/:id/delivery', auth, async (req, res) => {
     }
 
     // Update delivery status
-    order.delivery_status = delivery_status;
+    order.delivery_status = normalizedDeliveryStatus;
     
     // If delivered, mark order as completed
-    if (delivery_status === 'delivered') {
+    if (normalizedDeliveryStatus === 'delivered') {
       order.status = 'delivered';
     }
     
@@ -321,6 +390,26 @@ router.put('/:id/delivery', auth, async (req, res) => {
     
     await order.populate('user_id', 'full_name email phone');
     await order.populate('artwork_id', 'title price category image_url medium');
+
+    // Emit socket update for delivery status change
+    try {
+      const io = req.app?.locals?.io;
+      const payload = {
+        orderId: order._id,
+        status: order.status,
+        delivery_status: order.delivery_status,
+        tracking_id: order.tracking_id || order.trackingId || null,
+        courier_name: order.courier_name || null,
+        updated_at: order.updated_at || new Date(),
+      };
+
+      if (io) {
+        io.to(`order:${String(order._id)}`).emit('order.updated', payload);
+        io.emit('order.updated', payload);
+      }
+    } catch (e) {
+      console.error('[ORDERS API] Socket emit failed (delivery):', e);
+    }
 
     res.json({ success: true, message: 'Delivery status updated', order });
   } catch (error) {

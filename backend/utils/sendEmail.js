@@ -7,8 +7,8 @@ const getTransport = async () => {
     transportPromise = (async () => {
       const host = process.env.SMTP_HOST;
       const port = Number(process.env.SMTP_PORT || 587);
-      const user = process.env.SMTP_USER;
-      const pass = process.env.SMTP_PASS;
+      const user = process.env.SMTP_USER || process.env.EMAIL_ADDRESS;
+      const pass = process.env.SMTP_PASS || process.env.EMAIL_PASSWORD || process.env.APP_PASSWORD;
 
       console.log('=== SMTP Configuration ===');
       console.log('SMTP_HOST:', host ? 'SET' : 'MISSING');
@@ -17,7 +17,7 @@ const getTransport = async () => {
       console.log('SMTP_PASS:', pass ? '***SET***' : 'MISSING');
 
       if (!host || !user || !pass) {
-        throw new Error('SMTP configuration is missing. Please check SMTP_HOST, SMTP_USER, and SMTP_PASS environment variables.');
+        throw new Error('SMTP configuration is missing. Please set SMTP_HOST, SMTP_PORT, and either SMTP_USER/SMTP_PASS or EMAIL_ADDRESS with EMAIL_PASSWORD/APP_PASSWORD.');
       }
 
       const secure = String(process.env.SMTP_SECURE || '').toLowerCase() === 'true' || port === 465;
@@ -53,7 +53,7 @@ const sendEmail = async ({ to, subject, text, html }) => {
   console.log('To:', to);
   console.log('Subject:', subject);
   
-  const from = process.env.SMTP_FROM || process.env.SMTP_USER;
+  const from = process.env.SMTP_FROM || process.env.SMTP_USER || process.env.EMAIL_ADDRESS;
   if (!from) {
     throw new Error('SMTP_FROM is missing. Please set SMTP_FROM environment variable.');
   }

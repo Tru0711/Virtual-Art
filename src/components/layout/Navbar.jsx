@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Palette, Info, Mail, LogIn, User, LogOut, ChevronDown, Edit, BarChart3, ShoppingCart, Home, Search, Key } from 'lucide-react';
+import { Palette, Info, Mail, LogIn, User, LogOut, ChevronDown, Edit, BarChart3, ShoppingCart, Home, Search, Key, DollarSign } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getImageUrl } from '../../lib/imageUtils';
 import ArtistCredentialsModal from '../artist/ArtistCredentialsModal';
@@ -21,7 +21,6 @@ const Navbar = () => {
           const cartItems = JSON.parse(savedCart);
           // Check if it's not an object or null
           if (typeof cartItems !== 'object' || cartItems === null || Array.isArray(cartItems)) {
-            console.log('Invalid cart data, clearing');
             localStorage.removeItem('cartItems');
             setCartCount(0);
             return;
@@ -234,6 +233,17 @@ const Navbar = () => {
                         <Edit className="h-4 w-4" />
                         Edit Profile
                       </Link>
+                      {/* Payment Settings for artists */}
+                      {profile?.user_type === 'artist' && (
+                        <Link
+                          to="/artist/payment-settings"
+                          className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                          onClick={() => setDropdownOpen(false)}
+                        >
+                          <DollarSign className="h-4 w-4" />
+                          Payment Settings
+                        </Link>
+                      )}
                       {/* Credentials option for users and artists */}
                       {(profile?.user_type === 'artist' || profile?.user_type === 'user') && (
                         <button

@@ -3,6 +3,7 @@ const User = require('../models/User');
 const Artwork = require('../models/Artwork');
 const Order = require('../models/Order');
 const Review = require('../models/Review');
+const PaymentTransaction = require('../models/PaymentTransaction');
 const { auth } = require('../middleware/auth');
 const { checkAndGenerateCertificate } = require('../controllers/certificateController');
 
@@ -45,6 +46,108 @@ router.get('/users', auth, requireAdmin, async (req, res) => {
   try {
     const users = await User.find().select('-password');
     res.json(users);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.put('/users/:userId', auth, requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const {
+      full_name,
+      email,
+      user_type,
+      phone,
+      address,
+      city,
+      state,
+      country,
+      gender,
+      dateOfBirth,
+      profile_picture,
+    } = req.body;
+
+    const targetUser = await User.findById(userId);
+    if (!targetUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const normalizedType = user_type;
+    if (normalizedType && !['user', 'artist', 'admin'].includes(normalizedType)) {
+      return res.status(400).json({ message: 'Invalid user type' });
+    }
+
+    if (email) {
+      const existingUser = await User.findOne({ email, _id: { $ne: userId } });
+      if (existingUser) {
+        return res.status(409).json({ message: 'Email already exists' });
+      }
+    }
+
+    if (targetUser.user_type === 'admin' && normalizedType && normalizedType !== 'admin') {
+      const adminCount = await User.countDocuments({ user_type: 'admin' });
+      if (adminCount <= 1) {
+        return res.status(400).json({ message: 'At least one admin must remain active' });
+      }
+    }
+
+    const updates = {};
+    if (full_name !== undefined) updates.full_name = String(full_name).trim();
+    if (email !== undefined) updates.email = String(email).trim().toLowerCase();
+    if (normalizedType) updates.user_type = normalizedType;
+    if (phone !== undefined) updates.phone = phone;
+    if (address !== undefined) updates.address = address;
+    if (city !== undefined) updates.city = city;
+    if (state !== undefined) updates.state = state;
+    if (country !== undefined) updates.country = country;
+    if (gender !== undefined) updates.gender = gender || undefined;
+    if (dateOfBirth !== undefined) updates.dateOfBirth = dateOfBirth ? new Date(dateOfBirth) : undefined;
+    if (profile_picture !== undefined) updates.profile_picture = profile_picture;
+    updates.updated_at = new Date();
+
+    Object.assign(targetUser, updates);
+    await targetUser.save();
+
+    const safeUser = targetUser.toObject();
+    delete safeUser.password;
+
+    res.json({
+      success: true,
+      message: 'User updated successfully',
+      user: safeUser,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.delete('/users/:userId', auth, requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    if (String(req.user._id) === String(userId)) {
+      return res.status(400).json({ message: 'You cannot delete your own admin account' });
+    }
+
+    const targetUser = await User.findById(userId);
+    if (!targetUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (targetUser.user_type === 'admin') {
+      const adminCount = await User.countDocuments({ user_type: 'admin' });
+      if (adminCount <= 1) {
+        return res.status(400).json({ message: 'At least one admin must remain active' });
+      }
+    }
+
+    await User.findByIdAndDelete(userId);
+
+    res.json({
+      success: true,
+      message: 'User deleted successfully',
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -145,6 +248,69 @@ router.get('/orders', auth, requireAdmin, async (req, res) => {
     res.json(orders);
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+});
+
+// Get payment transaction analytics (admin only)
+router.get('/payment-transactions', auth, requireAdmin, async (req, res) => {
+  try {
+    const [transactions, totalsAgg, failedPayments] = await Promise.all([
+      PaymentTransaction.find()
+        .sort({ created_at: -1 })
+        .limit(50)
+        .populate('buyer_id', 'full_name email')
+        .populate('artist_id', 'full_name email')
+        .populate('artwork_id', 'title image_url'),
+      PaymentTransaction.aggregate([
+        {
+          $group: {
+            _id: null,
+            total_revenue: {
+              $sum: {
+                $cond: [{ $eq: ['$status', 'paid'] }, { $ifNull: ['$amount_paid', 0] }, 0],
+              },
+            },
+            total_commission_earned: {
+              $sum: {
+                $cond: [{ $eq: ['$status', 'paid'] }, { $ifNull: ['$commission_amount', 0] }, 0],
+              },
+            },
+            platform_markup_earned: {
+              $sum: {
+                $cond: [{ $eq: ['$status', 'paid'] }, { $ifNull: ['$markup_amount', 0] }, 0],
+              },
+            },
+            total_failed_payments: {
+              $sum: {
+                $cond: [{ $in: ['$status', ['failed', 'cancelled']] }, 1, 0],
+              },
+            },
+          },
+        },
+      ]),
+      PaymentTransaction.find({ status: { $in: ['failed', 'cancelled'] } })
+        .sort({ updated_at: -1 })
+        .limit(25)
+        .populate('buyer_id', 'full_name email')
+        .populate('artist_id', 'full_name email')
+        .populate('artwork_id', 'title image_url'),
+    ]);
+
+    const totals = totalsAgg[0] || {
+      total_revenue: 0,
+      total_commission_earned: 0,
+      platform_markup_earned: 0,
+      total_failed_payments: 0,
+    };
+
+    res.json({
+      summary: totals,
+      recent_transactions: transactions,
+      failed_payments: failedPayments,
+    });
+  } catch (error) {
+    console.error('Error fetching payment transactions:', error);
+    res.status(500).json({ message: error.message || 'Failed to load payment transactions' });
   }
 });
 

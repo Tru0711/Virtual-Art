@@ -19,6 +19,11 @@ const orderSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  artist_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
   artwork_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Artwork',
@@ -33,6 +38,31 @@ const orderSchema = new mongoose.Schema({
   total_amount: {
     type: Number,
     required: true,
+    min: 0
+  },
+  base_amount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  buyer_amount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  commission_amount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  artist_amount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  admin_amount: {
+    type: Number,
+    default: 0,
     min: 0
   },
   status: {
@@ -50,9 +80,34 @@ const orderSchema = new mongoose.Schema({
     enum: ['pending', 'paid', 'failed'],
     default: 'pending'
   },
+  payment_provider: {
+    type: String,
+    enum: ['COD', 'Online', 'razorpay', 'stripe'],
+    default: 'COD'
+  },
+  payment_reference: {
+    type: String,
+    default: ''
+  },
+  gateway_order_id: {
+    type: String,
+    default: ''
+  },
+  gateway_payment_id: {
+    type: String,
+    default: ''
+  },
+  gateway_signature: {
+    type: String,
+    default: ''
+  },
+  split_applied: {
+    type: Boolean,
+    default: false
+  },
   delivery_status: {
     type: String,
-    enum: ['pending', 'shipped', 'delivered'],
+    enum: ['pending', 'placed', 'processing', 'packed', 'shipped', 'out_for_delivery', 'delivered'],
     default: 'pending'
   },
   shipping_address: {

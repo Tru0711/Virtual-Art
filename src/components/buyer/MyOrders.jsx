@@ -4,7 +4,9 @@ import { api } from '../../lib/api';
 import { getImageUrl } from '../../lib/imageUtils';
 import { toast } from 'react-hot-toast';
 import ReviewModal from '../common/ReviewModal';
+import OrderDetailsModal from './OrderDetailsModal';
 import { Star, Package, Clock, CheckCircle } from 'lucide-react';
+import { getFormattedRupee } from '../../lib/pricing';
 
 const MyOrders = () => {
     const [myOrders, setMyOrders] = useState([]);
@@ -12,6 +14,7 @@ const MyOrders = () => {
     const [reviewModalOpen, setReviewModalOpen] = useState(false);
     const [selectedArtwork, setSelectedArtwork] = useState(null);
     const [selectedOrderId, setSelectedOrderId] = useState(null);
+    const [trackingOrderId, setTrackingOrderId] = useState(null);
     const [existingReview, setExistingReview] = useState(null);
     const [userReviews, setUserReviews] = useState({});
     const { profile } = useAuth();
@@ -20,14 +23,12 @@ const MyOrders = () => {
         try {
             setLoading(true);
             const response = await api.getOrders();
-            console.log('Orders response:', response);
             if (response.success) {
                 setMyOrders(response.orders || []);
             } else {
                 setMyOrders([]);
             }
         } catch (error) {
-            console.log('Error fetching orders:', error);
             setMyOrders([]);
         } finally {
             setLoading(false);
@@ -37,7 +38,6 @@ const MyOrders = () => {
     const fetchUserReviews = async () => {
         try {
             const response = await api.getUserReviews();
-            console.log('User reviews response:', response);
             if (response.success) {
                 const reviewsMap = {};
                 response.reviews?.forEach(review => {
@@ -47,7 +47,6 @@ const MyOrders = () => {
                 setUserReviews(reviewsMap);
             }
         } catch (error) {
-            console.log('Error fetching reviews:', error);
         }
     };
 
@@ -74,17 +73,14 @@ const MyOrders = () => {
         }
     }, [profile]);
 
-    // Check if order can be reviewed - AFTER 5 minutes from order date OR after delivery
     const canReviewOrder = (order) => {
         const deliveryStatus = order?.delivery_status?.toLowerCase();
         const status = order?.status?.toLowerCase();
         
-        // If already delivered, allow review
         if (deliveryStatus === 'delivered' || status === 'delivered' || status === 'completed') {
             return true;
         }
         
-        // Check if 5 minutes have passed since order date
         const orderDate = order?.order_date || order?.created_at;
         if (orderDate) {
             const minutesSinceOrder = Math.floor((new Date() - new Date(orderDate)) / (1000 * 60));
@@ -94,7 +90,6 @@ const MyOrders = () => {
         return false;
     };
     
-    // Display function for delivered status
     const isDelivered = (order) => {
         const deliveryStatus = order?.delivery_status?.toLowerCase();
         const status = order?.status?.toLowerCase();
@@ -115,7 +110,6 @@ const MyOrders = () => {
     return (
         <div className="min-h-screen bg-gradient-to-b from-amber-50 via-white to-rose-50 pt-16 pb-16">
             <div className="max-w-6xl mx-auto px-4">
-                {/* Header */}
                 <div className="text-center mb-8">
                     <h1 className="text-4xl font-bold text-gray-800 mb-2">My Orders</h1>
                     <div className="w-24 h-1 bg-amber-500 rounded-full mx-auto"></div>
@@ -134,7 +128,6 @@ const MyOrders = () => {
                     <div className="space-y-6">
                         {myOrders.map((order, index) => (
                             <div key={index} className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden hover:shadow-md transition-shadow">
-                                {/* Order Header - Order ID Only */}
                                 <div className="bg-gray-50 px-6 py-3 border-b border-gray-200">
                                     <div className="flex items-center gap-2">
                                         <span className="text-sm text-gray-600">Order ID:</span>
@@ -150,16 +143,14 @@ const MyOrders = () => {
                                     </div>
                                 </div>
 
-                                {/* Order Items */}
                                 <div className="divide-y divide-gray-100">
                                     {order.items?.map((item, itemIndex) => {
                                         const productId = item.product?._id || item.product?.id || item.productId;
                                         const isReviewed = !!userReviews[productId];
                                         const canReview = canReviewOrder(order);
                                         
-                                        return (
+                                                        return (
                                             <div key={itemIndex} className="p-6 flex flex-col md:flex-row md:items-center gap-6">
-                                                {/* Artwork Image */}
                                                 <div className="bg-gray-100 p-2 rounded-xl">
                                                     <img
                                                         src={getImageUrl(item.product?.image_url) || 'https://images.pexels.com/photos/1266808/pexels-photo-1266808.jpeg'}
@@ -171,7 +162,6 @@ const MyOrders = () => {
                                                     />
                                                 </div>
 
-                                                {/* Artwork Details */}
                                                 <div className="flex-1">
                                                     <h3 className="text-lg font-semibold text-gray-800">
                                                         {item.product?.title || item.productTitle || 'Artwork'}
@@ -196,13 +186,11 @@ const MyOrders = () => {
                                                     </div>
                                                 </div>
 
-                                                {/* Price & Review Button */}
                                                 <div className="flex flex-col items-end gap-3">
                                                     <p className="text-xl font-bold text-amber-600">
-                                                        ₹{((item.product?.price || item.price || 0) * (item.quantity || 1)).toLocaleString()}
+                                                        {getFormattedRupee(order.amount || order.total_amount || ((item.product?.price || item.price || 0) * (item.quantity || 1))) }
                                                     </p>
                                                     
-                                                    {/* Rate & Review Button - Show only for delivered orders or after 5 minutes */}
                                                     {canReview && !isReviewed && (
                                                         <button
                                                             onClick={() => handleRateReview(item.product, order._id)}
@@ -213,7 +201,6 @@ const MyOrders = () => {
                                                         </button>
                                                     )}
                                                     
-                                                    {/* Already Reviewed Badge */}
                                                     {isReviewed && (
                                                         <span className="px-4 py-2 bg-green-100 text-green-700 text-sm font-medium rounded-lg flex items-center gap-2">
                                                             <CheckCircle className="h-4 w-4" />
@@ -221,13 +208,19 @@ const MyOrders = () => {
                                                         </span>
                                                     )}
                                                     
-                                                    {/* Message for orders not yet eligible for review */}
                                                     {!canReview && !isReviewed && (
                                                         <span className="px-4 py-2 bg-gray-100 text-gray-500 text-sm font-medium rounded-lg flex items-center gap-2">
                                                             <Clock className="h-4 w-4" />
                                                             Review after 5 min
                                                         </span>
                                                     )}
+
+                                                    <button
+                                                        onClick={() => setTrackingOrderId(order._id || order.id)}
+                                                        className="mt-2 w-full md:w-auto px-4 py-2 bg-gradient-to-r from-indigo-600 to-cyan-500 hover:from-indigo-700 hover:to-cyan-600 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
+                                                    >
+                                                        View Tracking
+                                                    </button>
                                                 </div>
                                             </div>
                                         );
@@ -239,7 +232,6 @@ const MyOrders = () => {
                 )}
             </div>
 
-            {/* Review Modal */}
             {selectedArtwork && (
                 <ReviewModal
                     isOpen={reviewModalOpen}
@@ -253,6 +245,13 @@ const MyOrders = () => {
                     orderId={selectedOrderId}
                     existingReview={existingReview}
                     onReviewSubmitted={handleReviewSubmitted}
+                />
+            )}
+
+            {trackingOrderId && (
+                <OrderDetailsModal
+                    orderId={trackingOrderId}
+                    onClose={() => setTrackingOrderId(null)}
                 />
             )}
         </div>

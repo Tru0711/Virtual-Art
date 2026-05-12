@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Lock, ArrowLeft, CheckCircle, Eye, EyeOff } from 'lucide-react';
 import { api } from '../../lib/api';
 import { toastError, toastSuccess } from '../../lib/toast';
@@ -23,7 +23,10 @@ const isStrongPassword = (password = '') => {
 
 const ResetPassword = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { token } = useParams();
+  const email = location.state?.email || '';
+  const resetToken = location.state?.resetToken || '';
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -31,12 +34,14 @@ const ResetPassword = () => {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
+  const isOtpResetFlow = !token;
+
   useEffect(() => {
-    if (!token) {
+    if (!token && (!email || !resetToken)) {
       toastError('Invalid reset link');
       navigate('/forgot-password');
     }
-  }, [token, navigate]);
+  }, [token, email, resetToken, navigate]);
 
   const passwordStrength = getPasswordStrength(password);
   const strengthColors = ['bg-red-500', 'bg-orange-500', 'bg-yellow-500', 'bg-blue-500', 'bg-green-500'];
@@ -63,9 +68,14 @@ const ResetPassword = () => {
     setLoading(true);
     
     try {
-      console.log('Resetting password with token:', token.substring(0, 10) + '...');
-      const response = await api.resetPassword(token, password, confirmPassword);
-      console.log('Password reset response:', response);
+      const response = isOtpResetFlow
+        ? await api.resetPasswordWithOtp({
+            email,
+            resetToken,
+            password,
+            confirmPassword,
+          })
+        : await api.resetPassword(token, password, confirmPassword);
       
       setSuccess(true);
       toastSuccess(response?.message || 'Password reset successfully!');

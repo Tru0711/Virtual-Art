@@ -3,6 +3,7 @@ const { body, validationResult } = require('express-validator');
 const { auth } = require('../middleware/auth');
 const rateLimiter = require('../middleware/rateLimiter');
 const authController = require('../controllers/authController');
+const otpController = require('../controllers/otpController');
 
 const router = express.Router();
 
@@ -31,6 +32,59 @@ router.post(
   [body('email').isEmail().normalizeEmail(), body('password').exists()],
   validateRequest,
   authController.login
+);
+
+router.post(
+  '/send-otp',
+  [
+    body('email').isEmail().normalizeEmail(),
+    body('password').isLength({ min: 8 }),
+    body('full_name').notEmpty(),
+    body('user_type').isIn(['artist', 'user', 'buyer'])
+  ],
+  validateRequest,
+  otpController.sendOtp
+);
+
+router.post(
+  '/verify-otp',
+  [
+    body('email').isEmail().normalizeEmail(),
+    body('purpose').isIn(['signup', 'forgot_password', 'login']),
+    body('otp').isLength({ min: 6, max: 6 }).isNumeric()
+  ],
+  validateRequest,
+  otpController.verifyOtp
+);
+
+router.post(
+  '/resend-otp',
+  [
+    body('email').isEmail().normalizeEmail(),
+    body('purpose').isIn(['signup', 'forgot_password', 'login'])
+  ],
+  validateRequest,
+  otpController.resendOtp
+);
+
+router.post(
+  '/forgot-password-otp',
+  rateLimiter,
+  [body('email').isEmail().normalizeEmail()],
+  validateRequest,
+  otpController.forgotPasswordOtp
+);
+
+router.post(
+  '/reset-password',
+  [
+    body('email').isEmail().normalizeEmail(),
+    body('resetToken').notEmpty(),
+    body('password').isLength({ min: 8 }),
+    body('confirmPassword').isLength({ min: 8 })
+  ],
+  validateRequest,
+  otpController.resetPassword
 );
 
 router.post('/logout', auth, authController.logout);

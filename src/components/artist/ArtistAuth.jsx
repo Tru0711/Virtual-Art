@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Palette, Mail, Lock, User, Phone, Globe, MapPin, FileText } from 'lucide-react';
-import { login as authLogin, signup } from '../../lib/auth';
 import { useAuth } from '../../contexts/AuthContext';
+import { api } from '../../lib/api';
 
 const ArtistAuth = () => {
   const { login } = useAuth();
@@ -72,7 +72,7 @@ const ArtistAuth = () => {
     setLoading(true);
 
     try {
-      await signup({
+      const otpResponse = await api.sendOtp({
         email: signupData.email,
         password: signupData.password,
         full_name: signupData.full_name,
@@ -83,9 +83,15 @@ const ArtistAuth = () => {
         bio: signupData.bio,
         portfolio_link: signupData.portfolio_link || undefined,
       });
-      // After signup, login the user
-      await login({ email: signupData.email, password: signupData.password });
-      navigate('/artist/dashboard');
+
+      navigate('/verify-otp', {
+        state: {
+          email: signupData.email.trim().toLowerCase(),
+          purpose: 'signup',
+          expiresInSeconds: otpResponse?.expiresInSeconds,
+          cooldownSeconds: otpResponse?.cooldownSeconds,
+        },
+      });
     } catch (err) {
       setError(err.message || 'Signup failed');
     } finally {

@@ -6,6 +6,21 @@ const artworkSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  gallery_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Gallery',
+    default: null,
+    index: true
+  },
+  gallery_name: {
+    type: String,
+    default: ''
+  },
+  gallery_slug: {
+    type: String,
+    default: '',
+    index: true
+  },
   title: {
     type: String,
     required: true
@@ -19,6 +34,11 @@ const artworkSchema = new mongoose.Schema({
   price: {
     type: Number,
     required: true,
+    min: 0
+  },
+  base_price: {
+    type: Number,
+    default: null,
     min: 0
   },
   // Painting dimensions (width x height)
@@ -52,6 +72,25 @@ const artworkSchema = new mongoose.Schema({
   },
   watermarkedImage: {
     type: String
+  },
+  position: {
+    x: { type: Number, default: null },
+    y: { type: Number, default: null },
+    z: { type: Number, default: null },
+    rotationY: { type: Number, default: null },
+    scale: { type: Number, default: null },
+    wall: { type: String, default: '' },
+    row: { type: Number, default: null },
+    column: { type: Number, default: null }
+  },
+  frameStyle: {
+    type: String,
+    enum: ['classic', 'modern', 'floating', 'minimal'],
+    default: 'classic'
+  },
+  displayOrder: {
+    type: Number,
+    default: 0
   },
   imageHash: {
     type: String,
@@ -136,6 +175,18 @@ artworkSchema.index({ imageHash: 1 }, { unique: true });
 artworkSchema.index({ sha256Hash: 1 }, { unique: true, sparse: true });
 artworkSchema.index({ perceptualHash: 1 });
 artworkSchema.index({ artist_id: 1, created_at: -1 });
+artworkSchema.index({ gallery_id: 1, displayOrder: 1, created_at: -1 });
+
+artworkSchema.virtual('artistId').get(function() {
+  return this.artist_id;
+});
+
+artworkSchema.virtual('galleryId').get(function() {
+  return this.gallery_id;
+});
+
+artworkSchema.set('toJSON', { virtuals: true });
+artworkSchema.set('toObject', { virtuals: true });
 
 // Virtual for formatted size
 artworkSchema.virtual('formattedSize').get(function() {
