@@ -4,14 +4,11 @@
   "description": "Backend API for VisualArt marketplace",
   "main": "server.js",
   "scripts": {
-  "start": "node server.js",
-  "server": "node server.js",
-  "backend": "nodemon server.js",
-  "dev": "vite",
-  "build": "vite build",
-  "preview": "vite preview",
-  "test": "jest"
-},
+    "start": "node server.js",
+    "server": "node server.js",
+    "backend": "nodemon server.js",
+    "test": "jest"
+  },
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
@@ -26,12 +23,11 @@
     "pdfkit": "^0.13.0",
     "razorpay": "^2.9.6",
     "sharp": "^0.33.5",
-    "tesseract.js": "^5.0.5",
-    "socket.io": "^4.7.2"
+    "socket.io": "^4.7.2",
+    "tesseract.js": "^5.0.5"
   },
   "devDependencies": {
     "jest": "^29.7.0",
-    "nodemon": "^3.0.2",
-    "vite": "^latest"
+    "nodemon": "^3.0.2"
   }
 }
