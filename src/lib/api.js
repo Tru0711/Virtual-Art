@@ -31,14 +31,42 @@ class ApiClient {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'An error occurred' }));
-      const requestError = new Error(error.message || `HTTP ${response.status}`);
+      // Try to parse JSON error body, fallback to text
+      let errorBody = null;
+      try {
+        errorBody = await response.json();
+      } catch (e) {
+        try {
+          const txt = await response.text();
+          errorBody = { message: txt || `HTTP ${response.status}` };
+        } catch (_) {
+          errorBody = { message: `HTTP ${response.status}` };
+        }
+      }
+
+      const msg = (errorBody && (errorBody.message || JSON.stringify(errorBody))) || `HTTP ${response.status}`;
+      const requestError = new Error(msg);
       requestError.status = response.status;
-      requestError.data = error;
+      requestError.data = errorBody;
+      if (import.meta.env.DEV) {
+        // Helpful debug output in development
+        // eslint-disable-next-line no-console
+        console.error('API request error:', { url, options, status: response.status, body: errorBody });
+      }
       throw requestError;
     }
 
-    return response.json();
+    // Attempt to parse JSON response, but handle empty or non-JSON bodies gracefully
+    try {
+      return await response.json();
+    } catch (e) {
+      try {
+        const txt = await response.text();
+        return txt;
+      } catch (_) {
+        return null;
+      }
+    }
   }
 
   // Auth endpoints
