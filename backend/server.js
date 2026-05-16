@@ -10,27 +10,80 @@ dotenv.config();
 
 const app = express();
 app.set('trust proxy', true);
+const normalizeOrigin = (value) => {
+  if (!value) return null;
+
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  if (trimmed === '*') return '*';
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed.replace(/\/+$/, '');
+  }
+
+  return `https://${trimmed.replace(/\/+$/, '')}`;
+};
+
+const createOriginMatcher = (pattern) => {
+  const normalizedPattern = normalizeOrigin(pattern);
+  if (!normalizedPattern) return null;
+
+  if (normalizedPattern === '*') {
+    return () => true;
+  }
+
+  if (normalizedPattern.includes('*')) {
+    const escapedPattern = normalizedPattern
+      .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+      .replace(/\\\*/g, '.*');
+    const wildcardRegex = new RegExp(`^${escapedPattern}$`, 'i');
+    return (origin) => wildcardRegex.test(normalizeOrigin(origin) || '');
+  }
+
+  return (origin) => normalizeOrigin(origin) === normalizedPattern;
+};
+
 // Parse CORS origins from environment or use development defaults
 const getCorsOrigins = () => {
+  const configuredOrigins = [];
+
   if (process.env.CORS_ORIGINS) {
-    return process.env.CORS_ORIGINS.split(',').map(origin => origin.trim());
+    configuredOrigins.push(...process.env.CORS_ORIGINS.split(','));
   }
-  // If running in production and no explicit origins set, allow all origins
-  // (fallback). It's recommended to set CORS_ORIGINS in production.
-  if (process.env.NODE_ENV === 'production') {
-    return ['*'];
+
+  if (process.env.FRONTEND_URL) {
+    configuredOrigins.push(process.env.FRONTEND_URL);
   }
-  return ['http://localhost:5173', 'http://localhost:5174', 'http://127.0.0.1:5173', 'http://127.0.0.1:5174'];
+
+  if (process.env.VERCEL_URL) {
+    configuredOrigins.push(`https://${process.env.VERCEL_URL}`);
+  }
+
+  if (configuredOrigins.length === 0) {
+    if (process.env.NODE_ENV === 'production') {
+      // If running in production and no explicit origins are set, allow all origins.
+      return ['*'];
+    }
+
+    return ['http://localhost:5173', 'http://localhost:5174', 'http://127.0.0.1:5173', 'http://127.0.0.1:5174'];
+  }
+
+  return [...new Set(configuredOrigins.map(normalizeOrigin).filter(Boolean))];
 };
 
 const allowedOrigins = getCorsOrigins();
+const allowedOriginMatchers = allowedOrigins.map(createOriginMatcher).filter(Boolean);
+const isAllowedOrigin = (origin) => allowedOriginMatchers.some((matches) => matches(origin));
 
 // Top-level middleware: always add CORS headers for allowed origins early
 app.use((req, res, next) => {
   const origin = req.get('Origin');
   if (!origin) return next();
-  if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', allowedOrigins.includes('*') ? '*' : origin);
+
+  if (isAllowedOrigin(origin)) {
+    const normalizedOrigin = normalizeOrigin(origin);
+    res.setHeader('Access-Control-Allow-Origin', allowedOrigins.includes('*') ? '*' : normalizedOrigin || origin);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,PATCH,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
@@ -42,7 +95,7 @@ const corsOptions = {
   origin: (origin, callback) => {
     // Allow non-browser requests (e.g. server-to-server) without origin
     if (!origin) return callback(null, true);
-    if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+    if (isAllowedOrigin(origin)) {
       return callback(null, true);
     }
     return callback(new Error('Not allowed by CORS'));
@@ -59,9 +112,10 @@ app.use((req, res, next) => {
   const origin = req.get('Origin');
   if (!origin) return next();
 
-  if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+  if (isAllowedOrigin(origin)) {
     // When credentials are enabled, echo the origin instead of '*'
-    res.setHeader('Access-Control-Allow-Origin', allowedOrigins.includes('*') ? '*' : origin);
+    const normalizedOrigin = normalizeOrigin(origin);
+    res.setHeader('Access-Control-Allow-Origin', allowedOrigins.includes('*') ? '*' : normalizedOrigin || origin);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,PATCH,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');

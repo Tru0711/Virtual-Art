@@ -4,11 +4,24 @@
  * Supports artwork dimensions for proper wall scaling
  */
 
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
-import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js';
+// Load Three/OrbitControls dynamically and reuse existing instance if present
+let THREE = window.THREE;
+let OrbitControls = window.OrbitControls;
 
-// ----- Config -----
-const DEFAULT_IMAGE = 'https://images.pexels.com/photos/1266808/pexels-photo-1266808.jpeg';
+(async () => {
+  if (!THREE) {
+    const m = await import('https://cdn.jsdelivr.net/npm/three@0.184.0/build/three.module.js');
+    THREE = m;
+    window.THREE = THREE;
+  }
+  if (!OrbitControls) {
+    const c = await import('https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/controls/OrbitControls.js');
+    OrbitControls = c.OrbitControls;
+    window.OrbitControls = OrbitControls;
+  }
+
+  // ----- Config -----
+  const DEFAULT_IMAGE = 'https://images.pexels.com/photos/1266808/pexels-photo-1266808.jpeg';
 const DEFAULT_WIDTH = 24; // inches
 const DEFAULT_HEIGHT = 18; // inches
 const BASE_SCALE = 0.6;
@@ -639,3 +652,5 @@ init().catch((err) => {
     statusEl.classList.add('error');
   }
 });
+
+})();
