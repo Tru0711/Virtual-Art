@@ -1,6 +1,6 @@
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { resolveArtworkImageUrl } from "../../lib/imageUtils";
+import { resolveArtworkImageSource } from "../../lib/imageUtils";
 import { useAuth } from "../../contexts/AuthContext";
 
 export default function ArtworkCard({
@@ -21,9 +21,37 @@ export default function ArtworkCard({
 }) {
   const navigate = useNavigate();
   const { profile } = useAuth();
+  const [imageError, setImageError] = useState(false);
 
   // Extract artworkId from props
   const resolvedArtworkId = propArtworkId || artwork?._id || artwork?.id;
+  const resolvedImageUrl = useMemo(
+    () => resolveArtworkImageSource(artwork, image),
+    [artwork, image]
+  );
+
+  useEffect(() => {
+    setImageError(false);
+  }, [resolvedImageUrl, resolvedArtworkId]);
+
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
+      console.debug('[ArtworkCard] image resolution', {
+        artworkId: resolvedArtworkId,
+        resolvedImageUrl,
+        artworkFields: {
+          image: artwork?.image,
+          image_url: artwork?.image_url,
+          imageUrl: artwork?.imageUrl,
+          thumbnail: artwork?.thumbnail,
+          thumbnail_url: artwork?.thumbnail_url,
+          originalImageUrl: artwork?.originalImageUrl,
+          watermarkedImageUrl: artwork?.watermarkedImageUrl,
+        },
+      });
+    }
+  }, [artwork, resolvedArtworkId, resolvedImageUrl]);
 
   const handleViewDetails = () => {
     // Allow viewing artwork details without login
@@ -52,16 +80,23 @@ export default function ArtworkCard({
   const resolvedRating = rating ?? artwork?.avg_rating ?? 0;
   const resolvedPrice = Number(price || 0);
 
-  const resolvedImageUrl =
-    resolveArtworkImageUrl(artwork) ||
-    resolveArtworkImageUrl(image) ||
-    (typeof image === 'string' ? image : null) ||
-    null;
+  const showImage = Boolean(resolvedImageUrl && !imageError);
+
+  const renderPlaceholder = () => (
+    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-100 via-slate-200 to-slate-300">
+      <div className="text-center px-4">
+        <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-white/85 text-xl font-semibold text-slate-500 shadow-sm ring-1 ring-white/60">
+          {resolvedTitle.charAt(0).toUpperCase()}
+        </div>
+        <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Artwork unavailable</p>
+      </div>
+    </div>
+  );
   
   return (
     <div className="bg-white rounded-xl shadow-md hover:shadow-xl overflow-hidden flex flex-col border border-gray-100 hover:border-orange-200 transition-all duration-300 hover:-translate-y-1">
-      <div className="w-full h-[250px] bg-gray-100 overflow-hidden">
-        {resolvedImageUrl ? (
+      <div className="w-full h-[250px] bg-gray-100 overflow-hidden relative">
+        {showImage ? (
           <img
             src={resolvedImageUrl}
             className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
@@ -69,18 +104,19 @@ export default function ArtworkCard({
             loading="lazy"
             decoding="async"
             onError={(event) => {
-              event.currentTarget.style.display = 'none';
+              if (import.meta.env.DEV) {
+                // eslint-disable-next-line no-console
+                console.debug('[ArtworkCard] image failed to load', {
+                  artworkId: resolvedArtworkId,
+                  resolvedImageUrl,
+                });
+              }
+              setImageError(true);
+              event.currentTarget.removeAttribute('src');
             }}
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-gray-100 via-gray-200 to-gray-300">
-            <div className="text-center px-4">
-              <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-white/80 text-xl font-semibold text-gray-500 shadow-sm">
-                {resolvedTitle.charAt(0).toUpperCase()}
-              </div>
-              <p className="text-xs uppercase tracking-[0.2em] text-gray-500">No image</p>
-            </div>
-          </div>
+          renderPlaceholder()
         )}
       </div>
 

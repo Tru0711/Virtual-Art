@@ -21,6 +21,26 @@ const router = express.Router();
 
 const MAX_IMAGE_BYTES = Number(process.env.MAX_IMAGE_BYTES || 5242880);
 const MAX_IMAGE_REDIRECTS = 3;
+const ARTWORK_IMAGE_FIELDS = [
+  'image_url',
+  'image',
+  'imageUrl',
+  'watermarked_image_url',
+  'watermarkedImageUrl',
+  'watermarkedImage',
+  'thumbnail',
+  'thumbnail_url',
+  'originalImageUrl',
+  'original_image_url',
+  'originalImage',
+];
+const PLACEHOLDER_IMAGE_PATTERNS = [
+  /pexels\.com\/photos\/1266808/i,
+  /placeholder/i,
+  /default/i,
+  /sample/i,
+  /dummy/i,
+];
 
 const toAbsoluteUrl = (req, value) => {
   if (!value) return value;
@@ -29,6 +49,48 @@ const toAbsoluteUrl = (req, value) => {
   }
   const clean = value.startsWith('/') ? value : `/${value}`;
   return `${req.protocol}://${req.get('host')}${clean}`;
+};
+
+const isRenderableArtworkUrl = (value) => {
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) return false;
+  if (!/^https?:\/\//i.test(trimmed)) return false;
+  return !PLACEHOLDER_IMAGE_PATTERNS.some((pattern) => pattern.test(trimmed));
+};
+
+const pickRenderableArtworkUrl = (artwork) => {
+  for (const field of ARTWORK_IMAGE_FIELDS) {
+    const candidate = artwork?.[field];
+    if (isRenderableArtworkUrl(candidate)) {
+      return candidate.trim();
+    }
+  }
+  return null;
+};
+
+const backfillArtworkImageFields = async (artworkId, normalizedUrl, currentArtwork = {}) => {
+  if (!artworkId || !normalizedUrl) return;
+
+  const patch = {};
+  if (!currentArtwork.image_url) patch.image_url = normalizedUrl;
+  if (!currentArtwork.image) patch.image = normalizedUrl;
+  if (!currentArtwork.imageUrl) patch.imageUrl = normalizedUrl;
+  if (!currentArtwork.watermarked_image_url) patch.watermarked_image_url = normalizedUrl;
+  if (!currentArtwork.watermarkedImage) patch.watermarkedImage = normalizedUrl;
+  if (!currentArtwork.watermarkedImageUrl) patch.watermarkedImageUrl = normalizedUrl;
+  if (!currentArtwork.thumbnail) patch.thumbnail = normalizedUrl;
+  if (!currentArtwork.thumbnail_url) patch.thumbnail_url = normalizedUrl;
+  if (!currentArtwork.originalImageUrl) patch.originalImageUrl = normalizedUrl;
+  if (!currentArtwork.original_image_url) patch.original_image_url = normalizedUrl;
+  if (!currentArtwork.originalImage) patch.originalImage = normalizedUrl;
+
+  if (Object.keys(patch).length === 0) return;
+
+  await Artwork.findByIdAndUpdate(artworkId, patch, { new: false }).catch((error) => {
+    console.warn('[artworks] failed to backfill artwork image fields', artworkId, error.message);
+  });
 };
 
 const pickArtworkImageValue = (artwork) => (
@@ -48,12 +110,29 @@ const pickArtworkImageValue = (artwork) => (
 
 const normalizeArtworkImages = (req, artwork) => {
   const data = artwork.toObject ? artwork.toObject() : { ...artwork };
-  const imgUrl = pickArtworkImageValue(data);
-  const watermarkedUrl = data.watermarked_image_url || data.watermarkedImageUrl || data.watermarkedImage || data.thumbnail || data.thumbnail_url || data.image_url || data.image || data.imageUrl;
-  const originalUrl = data.original_image_url || data.originalImageUrl || data.originalImage || imgUrl;
-  data.image_url = toAbsoluteUrl(req, imgUrl);
-  data.watermarked_image_url = toAbsoluteUrl(req, watermarkedUrl);
-  data.original_image_url = toAbsoluteUrl(req, originalUrl);
+  const imgUrl = pickRenderableArtworkUrl(data);
+  const watermarkedUrl = isRenderableArtworkUrl(data.watermarked_image_url)
+    ? data.watermarked_image_url.trim()
+    : isRenderableArtworkUrl(data.watermarkedImageUrl)
+      ? data.watermarkedImageUrl.trim()
+      : isRenderableArtworkUrl(data.watermarkedImage)
+        ? data.watermarkedImage.trim()
+        : isRenderableArtworkUrl(data.thumbnail)
+          ? data.thumbnail.trim()
+          : isRenderableArtworkUrl(data.thumbnail_url)
+            ? data.thumbnail_url.trim()
+            : imgUrl;
+  const originalUrl = isRenderableArtworkUrl(data.original_image_url)
+    ? data.original_image_url.trim()
+    : isRenderableArtworkUrl(data.originalImageUrl)
+      ? data.originalImageUrl.trim()
+      : isRenderableArtworkUrl(data.originalImage)
+        ? data.originalImage.trim()
+        : imgUrl;
+
+  data.image_url = imgUrl;
+  data.watermarked_image_url = watermarkedUrl;
+  data.original_image_url = originalUrl;
   data.image = data.image || data.image_url;
   data.imageUrl = data.imageUrl || data.image_url;
   data.thumbnail = data.thumbnail || data.watermarked_image_url || data.image_url;
@@ -62,7 +141,23 @@ const normalizeArtworkImages = (req, artwork) => {
   data.watermarkedImageUrl = data.watermarkedImageUrl || data.watermarked_image_url;
   data.originalImage = data.originalImage || data.original_image_url;
   data.originalImageUrl = data.originalImageUrl || data.original_image_url;
-  if (!data.image_url) data.image_url = data.watermarked_image_url;
+  if (!data.image_url && data.watermarked_image_url) data.image_url = data.watermarked_image_url;
+
+  if (process.env.NODE_ENV === 'development') {
+    console.debug('[artworks] normalized artwork image', {
+      artworkId: data._id,
+      image_url: data.image_url,
+      watermarked_image_url: data.watermarked_image_url,
+      original_image_url: data.original_image_url,
+    });
+  }
+
+  if (!data.image_url && data._id) {
+    backfillArtworkImageFields(data._id, null, data).catch(() => {});
+  } else if (data._id && data.image_url) {
+    backfillArtworkImageFields(data._id, data.image_url, data).catch(() => {});
+  }
+
   const rawArtistId = data.artist_id?._id || data.artist_id;
   const rawGalleryId = data.gallery_id?._id || data.gallery_id || null;
   data.artistId = rawArtistId || data.artistId || null;
@@ -261,6 +356,8 @@ router.get('/public/:id', async (req, res) => {
     }
 
     const artworkObj = normalizeArtworkImages(req, artwork);
+    console.log('[artworks/public] response image_url:', artworkObj.image_url, 'artworkId:', artworkObj._id);
+    console.log('[artworks/public/:id] response image_url:', artworkObj.image_url, 'artworkId:', artworkObj._id);
     const rawArtistId = artwork.artist_id?._id || artwork.artist_id;
 
     // Resolve artist name similar to /public list
