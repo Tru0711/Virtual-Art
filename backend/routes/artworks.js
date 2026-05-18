@@ -15,9 +15,7 @@ const Review = require('../models/Review');
 const { auth } = require('../middleware/auth');
 const { checkPaymentInfoRequired } = require('../middleware/checkPaymentInfo');
 const upload = require('../middleware/upload');
-const { generateSHA256Hash, generateNormalizedSHA256Hash, generatePerceptualHash, calculateHashSimilarity } = require('../utils/imageHash');
-const { detectWatermarkedText } = require('../utils/textDetection');
-const { generateWatermarkedPreview } = require('../utils/watermark');
+const artworkController = require('../controllers/artworkController');
 
 const router = express.Router();
 
@@ -33,14 +31,37 @@ const toAbsoluteUrl = (req, value) => {
   return `${req.protocol}://${req.get('host')}${clean}`;
 };
 
+const pickArtworkImageValue = (artwork) => (
+  artwork.image_url
+  || artwork.image
+  || artwork.imageUrl
+  || artwork.watermarked_image_url
+  || artwork.watermarkedImageUrl
+  || artwork.watermarkedImage
+  || artwork.thumbnail
+  || artwork.thumbnail_url
+  || artwork.original_image_url
+  || artwork.originalImageUrl
+  || artwork.originalImage
+  || null
+);
+
 const normalizeArtworkImages = (req, artwork) => {
   const data = artwork.toObject ? artwork.toObject() : { ...artwork };
-  const imgUrl = data.image_url || data.watermarked_image_url || data.watermarkedImage;
-  const watermarkedUrl = data.watermarked_image_url || data.watermarkedImage || data.image_url;
-  const originalUrl = data.original_image_url || data.originalImage || imgUrl;
+  const imgUrl = pickArtworkImageValue(data);
+  const watermarkedUrl = data.watermarked_image_url || data.watermarkedImageUrl || data.watermarkedImage || data.thumbnail || data.thumbnail_url || data.image_url || data.image || data.imageUrl;
+  const originalUrl = data.original_image_url || data.originalImageUrl || data.originalImage || imgUrl;
   data.image_url = toAbsoluteUrl(req, imgUrl);
   data.watermarked_image_url = toAbsoluteUrl(req, watermarkedUrl);
   data.original_image_url = toAbsoluteUrl(req, originalUrl);
+  data.image = data.image || data.image_url;
+  data.imageUrl = data.imageUrl || data.image_url;
+  data.thumbnail = data.thumbnail || data.watermarked_image_url || data.image_url;
+  data.thumbnail_url = data.thumbnail_url || data.thumbnail;
+  data.watermarkedImage = data.watermarkedImage || data.watermarked_image_url;
+  data.watermarkedImageUrl = data.watermarkedImageUrl || data.watermarked_image_url;
+  data.originalImage = data.originalImage || data.original_image_url;
+  data.originalImageUrl = data.originalImageUrl || data.original_image_url;
   if (!data.image_url) data.image_url = data.watermarked_image_url;
   const rawArtistId = data.artist_id?._id || data.artist_id;
   const rawGalleryId = data.gallery_id?._id || data.gallery_id || null;
@@ -568,9 +589,22 @@ router.post('/', auth, [
       });
     }
 
+    const normalizedImageUrl = imageUrl;
+
     // Create artwork with published status by default
     const artwork = new Artwork({
       ...req.body,
+      image_url: normalizedImageUrl,
+      image: req.body.image || normalizedImageUrl,
+      imageUrl: req.body.imageUrl || normalizedImageUrl,
+      thumbnail: req.body.thumbnail || normalizedImageUrl,
+      thumbnail_url: req.body.thumbnail_url || normalizedImageUrl,
+      watermarked_image_url: req.body.watermarked_image_url || normalizedImageUrl,
+      watermarkedImage: req.body.watermarkedImage || normalizedImageUrl,
+      watermarkedImageUrl: req.body.watermarkedImageUrl || normalizedImageUrl,
+      original_image_url: req.body.original_image_url || normalizedImageUrl,
+      originalImage: req.body.originalImage || normalizedImageUrl,
+      originalImageUrl: req.body.originalImageUrl || normalizedImageUrl,
       artist_id: artistId,
       gallery_id: galleryContext.galleryId,
       gallery_name: galleryContext.galleryName,
@@ -743,250 +777,7 @@ router.delete('/:id', auth, async (req, res) => {
 
 // Upload artwork with image
 router.post('/upload', auth, checkPaymentInfoRequired, upload.artworkUpload.single('image'), async (req, res) => {
-  console.log('Upload request received');
-  console.log('User:', req.user);
-  console.log('Body:', req.body);
-  console.log('File:', req.file);
-
-  let uploadedFilePath = null;
-
-  try {
-    // Check if file was uploaded
-    if (!req.file) {
-      console.log('No file uploaded');
-      return res.status(400).json({ 
-        success: false,
-        message: 'No image file provided' 
-      });
-    }
-
-    uploadedFilePath = req.file.path;
-
-    // Simple validation
-    if (!req.body.title || !req.body.category || !req.body.price) {
-      console.log('Validation failed: missing fields');
-      // Clean up uploaded file
-      await fs.unlink(uploadedFilePath).catch(err => console.error('Error deleting file:', err));
-      return res.status(400).json({ 
-        success: false,
-        message: 'Missing required fields: title, category, price' 
-      });
-    }
-
-    // Check if user is an artist
-    if (req.user.user_type !== 'artist') {
-      console.log('User is not an artist');
-      // Clean up uploaded file
-      await fs.unlink(uploadedFilePath).catch(err => console.error('Error deleting file:', err));
-      return res.status(403).json({ 
-        success: false,
-        message: 'Only artists can upload artworks' 
-      });
-    }
-
-    // === DUPLICATE DETECTION ===
-    console.log('Starting duplicate detection...');
-
-    const fileBuffer = req.file.buffer ? req.file.buffer : await fs.readFile(uploadedFilePath);
-    const imageMeta = await sharp(fileBuffer).metadata();
-    const allowedFormats = new Set(['jpeg', 'png', 'webp']);
-    if (!allowedFormats.has(imageMeta.format)) {
-      await fs.unlink(uploadedFilePath).catch(err => console.error('Error deleting file:', err));
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid image type. Only jpg, jpeg, png, webp allowed.'
-      });
-    }
-
-    const sha256Hash = generateSHA256Hash(fileBuffer);
-    const imageHash = await generateNormalizedSHA256Hash(fileBuffer);
-    console.log('Generated SHA-256 hash:', sha256Hash);
-
-    const perceptualHash = await generatePerceptualHash(fileBuffer);
-    console.log('Generated perceptual hash:', perceptualHash || 'N/A');
-
-    const artistProfile = await ArtistProfile.findOne({ user_id: req.user._id });
-    console.log('Artist profile found:', artistProfile);
-
-    let artistId;
-    if (artistProfile) {
-      artistId = artistProfile._id;
-    } else {
-      console.log('No artist profile found, using user ID as artist ID');
-      artistId = req.user._id;
-    }
-
-    const exactDuplicate = await Artwork.findOne({ $or: [{ sha256Hash }, { imageHash }] })
-      .select('_id title created_at artist_id');
-    if (exactDuplicate) {
-      console.log('Exact duplicate detected:', exactDuplicate._id, 'hash:', imageHash);
-      await fs.unlink(uploadedFilePath).catch(err => console.error('Error deleting file:', err));
-
-      return res.status(409).json({
-        success: false,
-        errorType: 'DUPLICATE_IMAGE',
-        message: 'Duplicate artwork detected.'
-      });
-    }
-
-    if (perceptualHash) {
-      const minSimilarity = Number(process.env.IMAGE_SIMILARITY_MIN || 0.9);
-      const allArtworks = await Artwork.find({ perceptualHash: { $exists: true, $ne: null } })
-        .select('perceptualHash artist_id')
-        .limit(2000);
-
-      for (const artwork of allArtworks) {
-        const similarity = calculateHashSimilarity(perceptualHash, artwork.perceptualHash);
-        if (similarity >= minSimilarity) {
-          const isDifferentArtist = artwork.artist_id?.toString() !== artistId?.toString();
-          console.log('Similar image detected:', artwork._id, 'similarity:', similarity);
-          await fs.unlink(uploadedFilePath).catch(err => console.error('Error deleting file:', err));
-
-          return res.status(409).json({
-            success: false,
-            errorType: 'DUPLICATE_IMAGE',
-            message: isDifferentArtist
-              ? 'Similar artwork already exists.'
-              : 'Similar artwork already exists.'
-          });
-        }
-      }
-    }
-
-    const watermarkScan = await detectWatermarkedText(fileBuffer);
-    if (watermarkScan.hasKeyword || watermarkScan.hasLargeTextOverlay || watermarkScan.cornerTextDetected) {
-      await fs.unlink(uploadedFilePath).catch(err => console.error('Error deleting file:', err));
-      return res.status(422).json({
-        success: false,
-        errorType: 'WATERMARK_DETECTED',
-        message: 'Watermarked or copyrighted images are not allowed.'
-      });
-    }
-
-    console.log('No duplicates found, proceeding with upload...');
-
-    // === GENERATE WATERMARKED PREVIEW ===
-    const artistName = artistProfile?.artist_name || req.user.full_name || 'Artist';
-    const galleryContext = await resolveGalleryAssignment(req.user._id, req.body);
-    const signatureText = req.body.signatureText || artistName;
-    const signatureRelativePath = req.user.signatureImage;
-    const signatureAbsolutePath = signatureRelativePath
-      ? path.join(__dirname, '..', signatureRelativePath)
-      : null;
-
-    const uploadsRoot = path.join(__dirname, '..', 'uploads');
-    const publicPreviewDir = path.join(uploadsRoot, 'previews');
-    await fs.mkdir(publicPreviewDir, { recursive: true });
-
-    const previewFilename = `${path.parse(req.file.filename).name}-preview.jpg`;
-    const previewAbsolutePath = path.join(publicPreviewDir, previewFilename);
-    const previewRelativePath = `/uploads/previews/${previewFilename}`;
-    const originalRelativePath = `storage/originals/${req.file.filename}`;
-    const previewPublicUrl = `${req.protocol}://${req.get('host')}${previewRelativePath}`;
-
-    try {
-      await generateWatermarkedPreview({
-        originalImagePath: uploadedFilePath,
-        outputImagePath: previewAbsolutePath,
-        signatureImagePath: signatureAbsolutePath,
-        signatureText,
-        platformWatermarkText: process.env.PLATFORM_WATERMARK_TEXT || 'VisualArt',
-        enablePlatformWatermark: String(process.env.ENABLE_PLATFORM_WATERMARK || 'true') === 'true',
-        opacity: Number(process.env.WATERMARK_OPACITY || 0.2)
-      });
-    } catch (watermarkError) {
-      console.error('Error generating watermark:', watermarkError);
-      await fs.unlink(uploadedFilePath).catch(err => console.error('Error deleting file:', err));
-      return res.status(500).json({
-        success: false,
-        message: 'Failed to process image watermark. Please try again.'
-      });
-    }
-
-    const artwork = new Artwork({
-      title: req.body.title,
-      description: req.body.description || '',
-      category: req.body.category,
-      price: parseFloat(req.body.price),
-      base_price: parseFloat(req.body.price),
-      width: req.body.width ? parseFloat(req.body.width) : null,
-      height: req.body.height ? parseFloat(req.body.height) : null,
-      dimension_unit: req.body.dimension_unit || 'cm',
-      image_url: previewPublicUrl,
-      original_image_url: originalRelativePath,
-      watermarked_image_url: previewPublicUrl,
-      originalImage: originalRelativePath,
-      watermarkedImage: previewRelativePath,
-      imageHash: imageHash,
-      sha256Hash: sha256Hash,
-      perceptualHash: perceptualHash,
-      artist_id: artistId,
-      gallery_id: galleryContext.galleryId,
-      gallery_name: galleryContext.galleryName,
-      gallery_slug: galleryContext.gallerySlug,
-      frameStyle: req.body.frameStyle || galleryContext.frameStyle,
-      isPublic: true,
-      status: 'published'
-    });
-
-    console.log('Saving artwork:', artwork);
-    await artwork.save();
-
-    // Only populate and update count if artist profile exists
-    if (artistProfile) {
-      await artwork.populate('artist_id', 'full_name');
-      await artwork.populate('gallery_id', 'name slug description theme_key model_key cover_image layout display_order is_default');
-      // Update artist's artworks_sold count
-      await ArtistProfile.findByIdAndUpdate(artistProfile._id, {
-        $inc: { artworks_sold: 1 }
-      });
-    } else {
-      // Populate with user full_name if no artist profile
-      await artwork.populate('artist_id', 'full_name');
-      await artwork.populate('gallery_id', 'name slug description theme_key model_key cover_image layout display_order is_default');
-    }
-
-    console.log('Artwork saved successfully');
-    const responseArtwork = artwork.toObject();
-    delete responseArtwork.original_image_url;
-    delete responseArtwork.originalImage;
-
-    res.status(201).json({
-      success: true,
-      message: 'Artwork uploaded successfully! 🎨',
-      artwork: responseArtwork
-    });
-  } catch (error) {
-    console.error('Upload error:', error);
-    
-    // Clean up uploaded files on error
-    if (uploadedFilePath) {
-      await fs.unlink(uploadedFilePath).catch(err =>
-        console.error('Error deleting original file during cleanup:', err)
-      );
-
-      const previewFilename = `${path.parse(uploadedFilePath).name}-preview.jpg`;
-      const previewPath = path.join(__dirname, '..', 'uploads', 'previews', previewFilename);
-      await fs.unlink(previewPath).catch(err =>
-        console.error('Error deleting preview file during cleanup:', err)
-      );
-    }
-
-    // Handle specific MongoDB duplicate key error
-    if (error.code === 11000 && (error.keyPattern?.imageHash || error.keyValue?.imageHash || error.keyPattern?.sha256Hash || error.keyValue?.sha256Hash)) {
-      return res.status(409).json({
-        success: false,
-        errorType: 'DUPLICATE_IMAGE',
-        message: 'Duplicate artwork detected.'
-      });
-    }
-
-    res.status(500).json({ 
-      success: false,
-      message: 'Failed to upload artwork. Please try again.',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
+  return artworkController.uploadArtwork(req, res);
 });
 
 // Get short-lived token for original image download
@@ -1072,8 +863,21 @@ router.get('/:id/original', auth, async (req, res) => {
     }
 
     const originalPath = artwork.originalImage || artwork.original_image_url;
-    if (!originalPath || /^https?:\/\//i.test(originalPath)) {
+    if (!originalPath) {
       return res.status(404).json({ message: 'Original file not available' });
+    }
+
+    if (/^https?:\/\//i.test(originalPath)) {
+      const response = await fetch(originalPath);
+      if (!response.ok) {
+        return res.status(404).json({ message: 'Original file not available' });
+      }
+
+      const buffer = Buffer.from(await response.arrayBuffer());
+      res.setHeader('Content-Type', response.headers.get('content-type') || 'application/octet-stream');
+      res.setHeader('Content-Length', buffer.length);
+      res.setHeader('Cache-Control', 'private, max-age=300');
+      return res.send(buffer);
     }
 
     const resolvedPath = path.resolve(path.join(__dirname, '..', originalPath));

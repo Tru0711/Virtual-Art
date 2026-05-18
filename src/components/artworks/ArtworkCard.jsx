@@ -1,6 +1,6 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { getImageUrl } from "../../lib/imageUtils";
+import { resolveArtworkImageUrl } from "../../lib/imageUtils";
 import { useAuth } from "../../contexts/AuthContext";
 
 export default function ArtworkCard({
@@ -52,25 +52,36 @@ export default function ArtworkCard({
   const resolvedRating = rating ?? artwork?.avg_rating ?? 0;
   const resolvedPrice = Number(price || 0);
 
-  // Extract image URL from props or artwork object
-  const imageSrc = image || artwork?.image_url || artwork?.watermarked_image_url || artwork?.watermarkedImage;
+  const resolvedImageUrl =
+    resolveArtworkImageUrl(artwork) ||
+    resolveArtworkImageUrl(image) ||
+    (typeof image === 'string' ? image : null) ||
+    null;
   
   return (
     <div className="bg-white rounded-xl shadow-md hover:shadow-xl overflow-hidden flex flex-col border border-gray-100 hover:border-orange-200 transition-all duration-300 hover:-translate-y-1">
       <div className="w-full h-[250px] bg-gray-100 overflow-hidden">
-        <img
-          src={
-            getImageUrl(imageSrc) ||
-            "https://images.pexels.com/photos/1266808/pexels-photo-1266808.jpeg"
-          }
-          className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
-          alt={resolvedTitle}
-          onError={(event) => {
-            event.currentTarget.onerror = null;
-            event.currentTarget.src =
-              "https://images.pexels.com/photos/1266808/pexels-photo-1266808.jpeg";
-          }}
-        />
+        {resolvedImageUrl ? (
+          <img
+            src={resolvedImageUrl}
+            className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
+            alt={resolvedTitle}
+            loading="lazy"
+            decoding="async"
+            onError={(event) => {
+              event.currentTarget.style.display = 'none';
+            }}
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-gray-100 via-gray-200 to-gray-300">
+            <div className="text-center px-4">
+              <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-white/80 text-xl font-semibold text-gray-500 shadow-sm">
+                {resolvedTitle.charAt(0).toUpperCase()}
+              </div>
+              <p className="text-xs uppercase tracking-[0.2em] text-gray-500">No image</p>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="p-4 flex flex-col flex-1">

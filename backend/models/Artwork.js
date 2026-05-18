@@ -59,6 +59,14 @@ const artworkSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  image: {
+    type: String,
+    default: ''
+  },
+  imageUrl: {
+    type: String,
+    default: ''
+  },
   original_image_url: {
     type: String,
     default: ''
@@ -67,11 +75,27 @@ const artworkSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  thumbnail: {
+    type: String,
+    default: ''
+  },
+  thumbnail_url: {
+    type: String,
+    default: ''
+  },
   originalImage: {
     type: String
   },
+  originalImageUrl: {
+    type: String,
+    default: ''
+  },
   watermarkedImage: {
     type: String
+  },
+  watermarkedImageUrl: {
+    type: String,
+    default: ''
   },
   position: {
     x: { type: Number, default: null },

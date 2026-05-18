@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../lib/api';
-import { getImageUrl } from '../../lib/imageUtils';
+import { resolveArtworkImageUrl } from '../../lib/imageUtils';
 import img1 from "../../assets/img1.png";
 import img2 from "../../assets/img2.png";
 import img3 from "../../assets/img3.png";
@@ -37,6 +37,13 @@ export default function LatestCreations() {
 
     const displayArtworks = artworks.length > 0 ? artworks : fallbackImages;
 
+    const resolveArtworkImage = (item, index) => {
+        const resolved = resolveArtworkImageUrl(item);
+        if (resolved) return resolved;
+        if (item?.img) return item.img;
+        return fallbackImages[index]?.img || null;
+    };
+
     return (
         <>
             {/* Poppins Font */}
@@ -64,7 +71,7 @@ export default function LatestCreations() {
             ) : (
                 <div className="flex items-center justify-center gap-6 h-[400px] w-full max-w-5xl mx-auto mb-12">
                     {displayArtworks.map((item, index) => {
-                        const imageUrl = item.image_url ? getImageUrl(item.image_url) : item.img;
+                        const imageUrl = resolveArtworkImage(item, index);
                         const title = item.title || `Artwork ${index + 1}`;
                         const description = item.description || 'A beautiful piece of art.';
 

@@ -1,9 +1,11 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
+const crypto = require('crypto');
 const User = require('../models/User');
 const ArtistProfile = require('../models/ArtistProfile');
 const { auth } = require('../middleware/auth');
 const upload = require('../middleware/upload');
+const { uploadBuffer, isCloudinaryConfigured } = require('../config/cloudinary');
 
 const router = express.Router();
 
@@ -57,9 +59,20 @@ router.put('/:id', auth, upload.single('profile_picture'), [
     const updates = req.body;
     updates.updated_at = new Date();
 
-    // If a new profile picture was uploaded, use the path
+    // If a new profile picture was uploaded, store the Cloudinary URL
     if (req.file) {
-      updates.profile_picture = `/uploads/profiles/${req.file.filename}`;
+      if (!isCloudinaryConfigured) {
+        return res.status(500).json({ message: 'Cloudinary is not configured on the server.' });
+      }
+
+      const uploadResult = await uploadBuffer(req.file.buffer, {
+        folder: 'virtual-art/profiles',
+        public_id: `profile-${req.params.id}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`,
+        resource_type: 'image',
+        overwrite: true,
+      });
+
+      updates.profile_picture = uploadResult.secure_url;
     }
 
     const user = await User.findByIdAndUpdate(req.params.id, updates, { new: true }).select('-password');
@@ -88,10 +101,20 @@ router.post('/:id/signature', auth, upload.signatureUpload.single('signature'), 
       return res.status(400).json({ message: 'Signature must be a PNG with transparent background.' });
     }
 
-    const signaturePath = `storage/signatures/${req.file.filename}`;
+    if (!isCloudinaryConfigured) {
+      return res.status(500).json({ message: 'Cloudinary is not configured on the server.' });
+    }
+
+    const uploadResult = await uploadBuffer(req.file.buffer, {
+      folder: 'virtual-art/signatures',
+      public_id: `signature-${req.params.id}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`,
+      resource_type: 'image',
+      overwrite: true,
+    });
+
     const user = await User.findByIdAndUpdate(
       req.params.id,
-      { signatureImage: signaturePath, updated_at: new Date() },
+      { signatureImage: uploadResult.secure_url, updated_at: new Date() },
       { new: true }
     ).select('-password');
 
