@@ -286,6 +286,27 @@ function App() {
               <Footer />
             </>
           } />
+          <Route path="/gallery" element={
+            <ProtectedUserRoute>
+              <Suspense fallback={immersiveRouteLoader}>
+                <VRGallerySelection />
+              </Suspense>
+            </ProtectedUserRoute>
+          } />
+          <Route path="/vr" element={
+            <ProtectedUserRoute>
+              <Suspense fallback={immersiveRouteLoader}>
+                <VRGallerySelection />
+              </Suspense>
+            </ProtectedUserRoute>
+          } />
+          <Route path="/museum" element={
+            <ProtectedUserRoute>
+              <Suspense fallback={immersiveRouteLoader}>
+                <VRMuseum />
+              </Suspense>
+            </ProtectedUserRoute>
+          } />
           <Route path="/artists" element={
             <ProtectedUserRoute>
               <>

@@ -1,12 +1,13 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { io } from 'socket.io-client';
+import { getApiOrigin } from '../lib/appConfig';
 
 const SocketContext = createContext({ socket: null, connected: false });
 
 export const useSocket = () => useContext(SocketContext);
 
 export function SocketProvider({ children }) {
-  const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL || 'https://virtual-art-backend.onrender.com';
+  const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || getApiOrigin();
 
   const [connected, setConnected] = useState(false);
 

@@ -16,6 +16,7 @@ const ARView = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [showDeviceSelection, setShowDeviceSelection] = useState(true);
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   useEffect(() => {
     const fetchArtwork = async () => {
@@ -35,7 +36,13 @@ const ARView = () => {
     if (id) {
       fetchArtwork();
     }
-  }, [id]);
+  }, [id, loadAttempt]);
+
+  const handleRetry = () => {
+    setHasError(false);
+    setIsLoading(true);
+    setLoadAttempt((attempt) => attempt + 1);
+  };
 
   const handleImageLoad = () => {
     setIsLoading(false);
@@ -214,6 +221,15 @@ const ARView = () => {
                     <div className="text-center text-gray-500">
                       <div className="text-6xl mb-4">🖼️</div>
                       <p className="text-xl">{hasError ? 'Failed to load artwork' : 'Artwork preview not available'}</p>
+                      {hasError && (
+                        <button
+                          type="button"
+                          onClick={handleRetry}
+                          className="mt-4 rounded-lg bg-purple-600 px-4 py-2 text-white transition-colors hover:bg-purple-700"
+                        >
+                          Retry
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}

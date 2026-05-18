@@ -154,7 +154,7 @@ const sendCertificateEmail = async (artistEmail, artistName, level, artworkCount
             <p>You can now download your certificate from your artist dashboard. Display it proudly to showcase your achievements!</p>
 
             <center>
-              <a href="${process.env.FRONTEND_URL || 'https://yourplatform.com'}/artist/certificates" class="cta-button">View Your Certificate</a>
+              <a href="${process.env.FRONTEND_URL || 'https://virtual-art-psi.vercel.app'}/artist/certificates" class="cta-button">View Your Certificate</a>
             </center>
 
             <p style="margin-top: 30px;">Keep creating and pushing the boundaries of artistic expression. The next milestone awaits!</p>

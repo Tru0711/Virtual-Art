@@ -14,6 +14,7 @@ const Desktop3DPreview = () => {
   const [artwork, setArtwork] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   
   // 3D Preview controls
   const [scale, setScale] = useState(1);
@@ -38,7 +39,13 @@ const Desktop3DPreview = () => {
     if (artworkId) {
       fetchArtwork();
     }
-  }, [artworkId]);
+  }, [artworkId, loadAttempt]);
+
+  const handleRetry = () => {
+    setHasError(false);
+    setIsLoading(true);
+    setLoadAttempt((attempt) => attempt + 1);
+  };
 
   const handleBack = () => {
     navigate(`/ar-preview/${artworkId}`);
@@ -97,6 +104,12 @@ const Desktop3DPreview = () => {
         <div className="text-center bg-gray-800 rounded-2xl p-8">
           <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
           <p className="text-white text-xl mb-4">Failed to load artwork</p>
+          <button
+            onClick={handleRetry}
+            className="px-6 py-3 bg-white/20 text-white rounded-lg hover:bg-white/30 mr-3"
+          >
+            Retry
+          </button>
           <button
             onClick={() => navigate('/artworks')}
             className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"

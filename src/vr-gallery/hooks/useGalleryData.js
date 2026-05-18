@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
-import { buildGalleryCatalog, buildGalleryProfile } from '../utils/galleryCatalog';
+import { buildGalleryCatalog, buildGalleryProfile, fallbackGalleryCatalog } from '../utils/galleryCatalog';
 import { FORCE_SINGLE_GALLERY_MODEL, SELECTED_GALLERY_MODEL, SELECTED_MODEL_KEY } from '../config';
 
 const initialState = {
@@ -23,7 +23,15 @@ export const useGalleryData = (artistId, gallerySlug) => {
     const loadData = async () => {
       if (!artistId) {
         if (isActive) {
-          setState({ ...initialState, loading: false, error: 'Missing artist id.' });
+          const galleries = buildGalleryCatalog(fallbackGalleryCatalog);
+          setState({
+            loading: false,
+            error: '',
+            artist: null,
+            gallery: galleries[0] || null,
+            galleries,
+            artworks: [],
+          });
         }
         return;
       }

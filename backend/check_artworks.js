@@ -5,7 +5,7 @@ const ArtistProfile = require('./models/ArtistProfile');
 
 async function checkArtworks() {
   try {
-    const uri = process.env.MONGODB_URI || 'mongodb+srv://srujanatoukare:Srujana123@cluster0.cp7lq.mongodb.net/virtual?appName=Cluster0';
+    const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/virtual';
     await mongoose.connect(uri, {
       serverSelectionTimeoutMS: 5000,
       socketTimeoutMS: 45000,

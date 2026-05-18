@@ -47,6 +47,7 @@ const MyOrders = () => {
                 setUserReviews(reviewsMap);
             }
         } catch (error) {
+            console.warn('Failed to load user reviews:', error);
         }
     };
 

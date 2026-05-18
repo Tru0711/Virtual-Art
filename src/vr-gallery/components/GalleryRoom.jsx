@@ -1,10 +1,31 @@
-import { Suspense, useMemo } from 'react';
+import React, { Suspense, useMemo } from 'react';
 import * as THREE from 'three';
 import { Environment, Sparkles, Text, useGLTF } from '@react-three/drei';
-import { SELECTED_GALLERY_MODEL, FORCE_SINGLE_GALLERY_MODEL } from '../config';
+import { SELECTED_GALLERY_MODEL, FORCE_SINGLE_GALLERY_MODEL, SELECTED_MODEL_KEY } from '../config';
+import { resolveGalleryModelUrl } from '../utils/galleryCatalog';
+
+class GalleryModelErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback || null;
+    }
+
+    return this.props.children;
+  }
+}
 
 const GalleryArchitecture = ({ gallery }) => {
-  const model = useGLTF(gallery.modelUrl);
+  const modelUrl = resolveGalleryModelUrl(gallery.modelUrl || gallery.model_url || SELECTED_GALLERY_MODEL?.url, gallery.modelKey || SELECTED_MODEL_KEY || 'vr_gallery');
+  const model = useGLTF(modelUrl);
   const scene = useMemo(() => model.scene.clone(true), [model.scene]);
 
   return (
@@ -17,9 +38,7 @@ const GalleryArchitecture = ({ gallery }) => {
   );
 };
 
-const GalleryRoom = ({ gallery }) => {
-  const room = gallery.room;
-  const palette = gallery.palette;
+const ProceduralGalleryShell = ({ room, palette, gallery }) => {
   const width = room.width;
   const depth = room.depth;
   const height = room.height;
@@ -36,51 +55,32 @@ const GalleryRoom = ({ gallery }) => {
 
   return (
     <>
-      <color attach="background" args={[palette.background]} />
-      <fog attach="fog" args={[palette.fog, Math.max(width, depth), Math.max(width, depth) * 2.8]} />
+      <mesh rotation-x={-Math.PI / 2} receiveShadow>
+        <planeGeometry args={[width, depth]} />
+        <meshStandardMaterial color={palette.floor} roughness={0.9} metalness={0.04} />
+      </mesh>
 
-      <ambientLight intensity={palette.ambient} color="#fff7ef" />
-      <directionalLight
-        castShadow
-        position={[4, height + 6, 5]}
-        intensity={palette.directional}
-        color="#ffffff"
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
-      />
-      <hemisphereLight skyColor="#ffffff" groundColor={palette.floor} intensity={0.3} />
+      <mesh position={[0, ceilingPosition, 0]} rotation-x={Math.PI / 2} receiveShadow>
+        <planeGeometry args={[width, depth]} />
+        <meshStandardMaterial color={palette.ceiling} roughness={0.95} metalness={0.02} />
+      </mesh>
 
-      {/* If a model URL is provided (and we're forcing a single gallery model), avoid rendering the procedural architecture to prevent duplicates. */}
-      {!(gallery.modelUrl) && (
-        <>
-          <mesh rotation-x={-Math.PI / 2} receiveShadow>
-            <planeGeometry args={[width, depth]} />
-            <meshStandardMaterial color={palette.floor} roughness={0.9} metalness={0.04} />
-          </mesh>
-
-          <mesh position={[0, ceilingPosition, 0]} rotation-x={Math.PI / 2} receiveShadow>
-            <planeGeometry args={[width, depth]} />
-            <meshStandardMaterial color={palette.ceiling} roughness={0.95} metalness={0.02} />
-          </mesh>
-
-          <mesh position={[0, height / 2, -depth / 2]} receiveShadow castShadow>
-            <boxGeometry args={[width, height, wallThickness]} />
-            <meshStandardMaterial color={palette.wall} roughness={0.88} metalness={0.04} />
-          </mesh>
-          <mesh position={[0, height / 2, depth / 2]} receiveShadow castShadow>
-            <boxGeometry args={[width, height, wallThickness]} />
-            <meshStandardMaterial color={palette.wall} roughness={0.88} metalness={0.04} />
-          </mesh>
-          <mesh position={[-width / 2, height / 2, 0]} rotation-y={Math.PI / 2} receiveShadow castShadow>
-            <boxGeometry args={[depth, height, wallThickness]} />
-            <meshStandardMaterial color={palette.wall} roughness={0.9} metalness={0.03} />
-          </mesh>
-          <mesh position={[width / 2, height / 2, 0]} rotation-y={Math.PI / 2} receiveShadow castShadow>
-            <boxGeometry args={[depth, height, wallThickness]} />
-            <meshStandardMaterial color={palette.wall} roughness={0.9} metalness={0.03} />
-          </mesh>
-        </>
-      )}
+      <mesh position={[0, height / 2, -depth / 2]} receiveShadow castShadow>
+        <boxGeometry args={[width, height, wallThickness]} />
+        <meshStandardMaterial color={palette.wall} roughness={0.88} metalness={0.04} />
+      </mesh>
+      <mesh position={[0, height / 2, depth / 2]} receiveShadow castShadow>
+        <boxGeometry args={[width, height, wallThickness]} />
+        <meshStandardMaterial color={palette.wall} roughness={0.88} metalness={0.04} />
+      </mesh>
+      <mesh position={[-width / 2, height / 2, 0]} rotation-y={Math.PI / 2} receiveShadow castShadow>
+        <boxGeometry args={[depth, height, wallThickness]} />
+        <meshStandardMaterial color={palette.wall} roughness={0.9} metalness={0.03} />
+      </mesh>
+      <mesh position={[width / 2, height / 2, 0]} rotation-y={Math.PI / 2} receiveShadow castShadow>
+        <boxGeometry args={[depth, height, wallThickness]} />
+        <meshStandardMaterial color={palette.wall} roughness={0.9} metalness={0.03} />
+      </mesh>
 
       {lightPositions.slice(0, 2).map((position, index) => (
         <spotLight
@@ -96,10 +96,6 @@ const GalleryRoom = ({ gallery }) => {
       ))}
 
       <pointLight position={[0, height - 0.1, 0]} intensity={0.35} distance={Math.max(width, depth)} color={palette.accent} />
-
-      <Suspense fallback={null}>
-        {gallery.modelUrl && <GalleryArchitecture gallery={gallery} />}
-      </Suspense>
 
       <Text
         position={[0, height + 0.2, -depth / 2 + 0.2]}
@@ -117,11 +113,45 @@ const GalleryRoom = ({ gallery }) => {
   );
 };
 
+const GalleryRoom = ({ gallery }) => {
+  const room = gallery.room;
+  const palette = gallery.palette;
+  const shouldUseModel = Boolean(gallery.modelUrl);
+
+  return (
+    <>
+      <color attach="background" args={[palette.background]} />
+      <fog attach="fog" args={[palette.fog, Math.max(room.width, room.depth), Math.max(room.width, room.depth) * 2.8]} />
+
+      <ambientLight intensity={palette.ambient} color="#fff7ef" />
+      <directionalLight
+        castShadow
+        position={[4, room.height + 6, 5]}
+        intensity={palette.directional}
+        color="#ffffff"
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
+      />
+      <hemisphereLight skyColor="#ffffff" groundColor={palette.floor} intensity={0.3} />
+
+      {shouldUseModel ? (
+        <Suspense fallback={<ProceduralGalleryShell room={room} palette={palette} gallery={gallery} />}>
+          <GalleryModelErrorBoundary fallback={<ProceduralGalleryShell room={room} palette={palette} gallery={gallery} />}>
+            <GalleryArchitecture gallery={gallery} />
+          </GalleryModelErrorBoundary>
+        </Suspense>
+      ) : (
+        <ProceduralGalleryShell room={room} palette={palette} gallery={gallery} />
+      )}
+    </>
+  );
+};
+
 // Preload only the forced selected gallery model to avoid loading multiple models.
 if (FORCE_SINGLE_GALLERY_MODEL && SELECTED_GALLERY_MODEL?.url) {
-  useGLTF.preload?.(SELECTED_GALLERY_MODEL.url);
+  useGLTF.preload?.(resolveGalleryModelUrl(SELECTED_GALLERY_MODEL.url, SELECTED_MODEL_KEY || 'vr_gallery'));
 } else {
-  useGLTF.preload?.(new URL('../../../Galleries/vr_gallery.glb', import.meta.url).href);
+  useGLTF.preload?.(resolveGalleryModelUrl(new URL('../../../Galleries/vr_gallery.glb', import.meta.url).href, 'vr_gallery'));
 }
 
 export default GalleryRoom;

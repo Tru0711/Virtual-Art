@@ -1,10 +1,35 @@
-const rawApiUrl = import.meta.env.VITE_API_URL;
-function normalizeApiBase(url) {
-  if (!url) return 'https://virtual-art-backend.onrender.com/api';
-  const u = url.replace(/\/$/, '');
-  return u.endsWith('/api') ? u : `${u}/api`;
-}
-const API_BASE_URL = normalizeApiBase(rawApiUrl);
+import { getApiBaseUrl, sleep } from './appConfig';
+
+const API_BASE_URL = getApiBaseUrl();
+const DEFAULT_TIMEOUT_MS = Number(import.meta.env.VITE_API_TIMEOUT_MS || 25000);
+const RETRYABLE_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
+
+const getMethod = (options = {}) => String(options.method || 'GET').toUpperCase();
+const shouldRetryMethod = (method) => ['GET', 'HEAD'].includes(method);
+
+const safeJson = async (response) => {
+  try {
+    return await response.clone().json();
+  } catch (error) {
+    return null;
+  }
+};
+
+const safeText = async (response) => {
+  try {
+    return await response.clone().text();
+  } catch (error) {
+    return '';
+  }
+};
+
+const createRequestError = (response, body) => {
+  const message = body?.message || (typeof body === 'string' && body) || `HTTP ${response.status}`;
+  const error = new Error(message);
+  error.status = response.status;
+  error.data = body;
+  return error;
+};
 
 class ApiClient {
   constructor() {
@@ -19,6 +44,78 @@ class ApiClient {
     this.token = null;
   }
 
+  async fetchResponse(url, options = {}, retryOptions = {}) {
+    const method = getMethod(options);
+    const retries = retryOptions.retries ?? (shouldRetryMethod(method) ? 2 : 0);
+    const timeoutMs = retryOptions.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const retryDelayMs = retryOptions.retryDelayMs ?? 750;
+
+    let lastError = null;
+
+    for (let attempt = 0; attempt <= retries; attempt += 1) {
+      const controller = new AbortController();
+      const timeoutId = globalThis.setTimeout(() => controller.abort(new Error('Request timed out')), timeoutMs);
+
+      try {
+        const response = await fetch(url, {
+          ...options,
+          credentials: options.credentials || 'include',
+          cache: options.cache || 'no-cache',
+          signal: controller.signal,
+        });
+
+        if (!response.ok && attempt < retries && RETRYABLE_STATUSES.has(response.status)) {
+          await sleep(retryDelayMs * (attempt + 1));
+          continue;
+        }
+
+        return response;
+      } catch (error) {
+        lastError = error;
+        const isAbort = error?.name === 'AbortError' || /timed out/i.test(error?.message || '');
+        const isRetryableNetworkError = isAbort || error?.message === 'Failed to fetch' || error?.message === 'NetworkError when attempting to fetch resource.';
+
+        if (attempt < retries && isRetryableNetworkError) {
+          await sleep(retryDelayMs * (attempt + 1));
+          continue;
+        }
+
+        throw error;
+      } finally {
+        globalThis.clearTimeout(timeoutId);
+      }
+    }
+
+    throw lastError || new Error('Request failed');
+  }
+
+  async fetchJson(url, options = {}, retryOptions = {}) {
+    const response = await this.fetchResponse(url, options, retryOptions);
+
+    if (!response.ok) {
+      const jsonBody = await safeJson(response);
+      const textBody = jsonBody ? null : await safeText(response);
+      throw createRequestError(response, jsonBody || textBody);
+    }
+
+    const jsonBody = await safeJson(response);
+    if (jsonBody !== null) return jsonBody;
+
+    return safeText(response);
+  }
+
+  async fetchBlob(url, options = {}, retryOptions = {}) {
+    const response = await this.fetchResponse(url, options, retryOptions);
+
+    if (!response.ok) {
+      const jsonBody = await safeJson(response);
+      const textBody = jsonBody ? null : await safeText(response);
+      throw createRequestError(response, jsonBody || textBody);
+    }
+
+    return response.blob();
+  }
+
   async request(endpoint, options = {}) {
     const url = `${API_BASE_URL}${endpoint}`;
     const headers = {
@@ -30,48 +127,18 @@ class ApiClient {
       headers.Authorization = `Bearer ${this.token}`;
     }
 
-    const response = await fetch(url, {
-      ...options,
-      headers,
-      cache: 'no-cache',
-    });
-
-    if (!response.ok) {
-      // Try to parse JSON error body, fallback to text
-      let errorBody = null;
-      try {
-        errorBody = await response.json();
-      } catch (e) {
-        try {
-          const txt = await response.text();
-          errorBody = { message: txt || `HTTP ${response.status}` };
-        } catch (_) {
-          errorBody = { message: `HTTP ${response.status}` };
-        }
-      }
-
-      const msg = (errorBody && (errorBody.message || JSON.stringify(errorBody))) || `HTTP ${response.status}`;
-      const requestError = new Error(msg);
-      requestError.status = response.status;
-      requestError.data = errorBody;
-      if (import.meta.env.DEV) {
-        // Helpful debug output in development
-        // eslint-disable-next-line no-console
-        console.error('API request error:', { url, options, status: response.status, body: errorBody });
-      }
-      throw requestError;
-    }
-
-    // Attempt to parse JSON response, but handle empty or non-JSON bodies gracefully
     try {
-      return await response.json();
-    } catch (e) {
-      try {
-        const txt = await response.text();
-        return txt;
-      } catch (_) {
-        return null;
+      return await this.fetchJson(url, {
+        ...options,
+        headers,
+      });
+    } catch (error) {
+      if (import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
+        console.error('API request error:', { url, options, error });
       }
+
+      throw error;
     }
   }
 
@@ -193,22 +260,13 @@ class ApiClient {
       headers.Authorization = `Bearer ${this.token}`;
     }
 
-    const response = await fetch(url, {
+    return this.fetchJson(url, {
       method: 'POST',
       headers,
       body: formData,
-      cache: 'no-cache',
+    }, {
+      retries: 0,
     });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'An error occurred' }));
-      const requestError = new Error(error.message || `HTTP ${response.status}`);
-      requestError.status = response.status;
-      requestError.data = error;
-      throw requestError;
-    }
-
-    return response.json();
   }
 
   async uploadProfilePicture(id, formData) {
@@ -219,22 +277,13 @@ class ApiClient {
       headers.Authorization = `Bearer ${this.token}`;
     }
 
-    const response = await fetch(url, {
+    return this.fetchJson(url, {
       method: 'PUT',
       headers,
       body: formData,
-      cache: 'no-cache',
+    }, {
+      retries: 0,
     });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'An error occurred' }));
-      const requestError = new Error(error.message || `HTTP ${response.status}`);
-      requestError.status = response.status;
-      requestError.data = error;
-      throw requestError;
-    }
-
-    return response.json();
   }
 
   async deleteProfile(id) {
@@ -279,23 +328,27 @@ class ApiClient {
   // Artist discovery for Meet Our Artists (public, no auth required)
   async getArtists() {
     const url = `${API_BASE_URL}/artists/public`;
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-      cache: 'no-cache',
-    });
-    if (res.ok) {
-      const data = await res.json();
+    try {
+      const data = await this.fetchJson(url, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
       return Array.isArray(data) ? data : [];
+    } catch (error) {
+      // Fallback for logged-in users if public endpoint fails (e.g. old backend)
+      if (this.token) {
+        try {
+          return await this.request('/artists');
+        } catch (fallbackError) {
+          if (import.meta.env.DEV) {
+            // eslint-disable-next-line no-console
+            console.warn('[ApiClient] getArtists fallback failed', fallbackError);
+          }
+        }
+      }
+
+      throw error;
     }
-    // Fallback for logged-in users if public endpoint fails (e.g. old backend)
-    if (this.token) {
-      try {
-        return await this.request('/artists');
-      } catch {}
-    }
-    const err = await res.json().catch(() => ({ message: 'Failed to load artists' }));
-    throw new Error(err.message || `Failed to load artists (${res.status})`);
   }
 
   async getArtist(id) {
@@ -320,44 +373,22 @@ class ApiClient {
   async getPublicArtworks(params) {
     const query = params ? '?' + new URLSearchParams(params).toString() : '';
     const url = `${API_BASE_URL}/artworks/public${query}`;
-    const response = await fetch(url, {
+    return this.fetchJson(url, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
       },
-      cache: 'no-cache',
     });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'An error occurred' }));
-      const requestError = new Error(error.message || `HTTP ${response.status}`);
-      requestError.status = response.status;
-      requestError.data = error;
-      throw requestError;
-    }
-
-    return response.json();
   }
 
   async getPublicArtwork(id) {
     const url = `${API_BASE_URL}/artworks/public/${id}`;
-    const response = await fetch(url, {
+    return this.fetchJson(url, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
       },
-      cache: 'no-cache',
     });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'An error occurred' }));
-      const requestError = new Error(error.message || `HTTP ${response.status}`);
-      requestError.status = response.status;
-      requestError.data = error;
-      throw requestError;
-    }
-
-    return response.json();
   }
 
   async getArtwork(id) {
@@ -387,21 +418,13 @@ class ApiClient {
       headers.Authorization = `Bearer ${this.token}`;
     }
 
-    const response = await fetch(url, {
+    return this.fetchJson(url, {
       method: 'POST',
       headers,
       body: formData,
+    }, {
+      retries: 0,
     });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'An error occurred' }));
-      const requestError = new Error(error.message || `HTTP ${response.status}`);
-      requestError.status = response.status;
-      requestError.data = error;
-      throw requestError;
-    }
-
-    return response.json();
   }
 
   async updateArtwork(id, updates) {
@@ -434,13 +457,7 @@ class ApiClient {
       headers.Authorization = `Bearer ${this.token}`;
     }
 
-    const response = await fetch(url, { headers });
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'An error occurred' }));
-      throw new Error(error.message || `HTTP ${response.status}`);
-    }
-
-    return response.blob();
+    return this.fetchBlob(url, { headers }, { retries: 0 });
   }
 
   // Order endpoints

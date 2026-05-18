@@ -56,17 +56,18 @@ const getCorsOrigins = () => {
     configuredOrigins.push(process.env.FRONTEND_URL);
   }
 
+  configuredOrigins.push('https://virtual-art-psi.vercel.app');
+
   if (process.env.VERCEL_URL) {
     configuredOrigins.push(`https://${process.env.VERCEL_URL}`);
   }
 
   if (configuredOrigins.length === 0) {
     if (process.env.NODE_ENV === 'production') {
-      // If running in production and no explicit origins are set, allow all origins.
-      return ['*'];
+      return ['https://virtual-art-psi.vercel.app'];
     }
 
-    return ['http://localhost:5173', 'http://localhost:5174', 'http://127.0.0.1:5173', 'http://127.0.0.1:5174'];
+    return ['http://127.0.0.1:5173', 'http://127.0.0.1:5174'];
   }
 
   return [...new Set(configuredOrigins.map(normalizeOrigin).filter(Boolean))];
@@ -83,10 +84,10 @@ app.use((req, res, next) => {
 
   if (isAllowedOrigin(origin)) {
     const normalizedOrigin = normalizeOrigin(origin);
-    res.setHeader('Access-Control-Allow-Origin', allowedOrigins.includes('*') ? '*' : normalizedOrigin || origin);
+    res.setHeader('Access-Control-Allow-Origin', normalizedOrigin || origin);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,PATCH,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,Origin,Accept,X-Requested-With');
   }
   next();
 });
@@ -115,10 +116,10 @@ app.use((req, res, next) => {
   if (isAllowedOrigin(origin)) {
     // When credentials are enabled, echo the origin instead of '*'
     const normalizedOrigin = normalizeOrigin(origin);
-    res.setHeader('Access-Control-Allow-Origin', allowedOrigins.includes('*') ? '*' : normalizedOrigin || origin);
+    res.setHeader('Access-Control-Allow-Origin', normalizedOrigin || origin);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,PATCH,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,Origin,Accept,X-Requested-With');
     return next();
   }
 
@@ -205,6 +206,7 @@ const startServer = async () => {
         if (orderId) socket.leave(`order:${orderId}`);
       });
     } catch (e) {
+      console.warn('Socket room handler error:', e?.message || e);
     }
   });
 
@@ -260,10 +262,10 @@ app.get('/api/ping-cors', (req, res) => {
   const origin = req.get('Origin') || null;
   const allowed = !origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin);
   if (origin && allowed) {
-    res.setHeader('Access-Control-Allow-Origin', allowedOrigins.includes('*') ? '*' : origin);
+    res.setHeader('Access-Control-Allow-Origin', normalizeOrigin(origin) || origin);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,PATCH,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,Origin,Accept,X-Requested-With');
   }
   res.json({ ok: true, origin, allowed });
 });

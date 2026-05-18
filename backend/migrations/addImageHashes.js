@@ -19,7 +19,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const { generateSHA256Hash, generatePerceptualHash } = require('../utils/imageHash');
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/virtual';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/virtual';
 
 async function migrateArtworks() {
   try {

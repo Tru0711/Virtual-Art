@@ -36,6 +36,13 @@ const VRGallery = () => {
             >
               Back to artist
             </button>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="rounded-full bg-cyan-500 px-4 py-2 text-sm font-semibold text-black"
+            >
+              Retry
+            </button>
           </div>
         </div>
       </div>

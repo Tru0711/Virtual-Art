@@ -170,7 +170,7 @@ const forgotPassword = async (req, res) => {
       console.log('Token saved to database with expiry:', user.resetPasswordExpire);
 
       // Build reset URL with raw token (not hashed)
-      const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+      const baseUrl = process.env.FRONTEND_URL || 'https://virtual-art-psi.vercel.app';
       const resetUrl = `${baseUrl.replace(/\/$/, '')}/reset-password/${rawToken}`;
       console.log('Reset URL created:', resetUrl);
 

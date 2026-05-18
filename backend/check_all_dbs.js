@@ -1,6 +1,7 @@
+require('dotenv').config();
 const { MongoClient } = require('mongodb');
 
-const uri = 'mongodb+srv://srujanatoukare:Srujana123@cluster0.cp7lq.mongodb.net/virtual?appName=Cluster0';
+const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/virtual';
 
 async function checkDatabases() {
   const client = new MongoClient(uri);

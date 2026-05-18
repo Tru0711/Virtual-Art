@@ -1,9 +1,7 @@
 import axios from 'axios';
+import { getApiBaseUrl } from './appConfig';
 
-const rawBaseUrl = import.meta.env.VITE_API_URL;
-const API_BASE_URL = rawBaseUrl
-  ? (rawBaseUrl.endsWith('/api') ? rawBaseUrl : `${rawBaseUrl}/api`)
-  : 'https://virtual-art-backend.onrender.com/api';
+const API_BASE_URL = getApiBaseUrl();
 
 const adminClient = axios.create({
   baseURL: API_BASE_URL,

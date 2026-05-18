@@ -26,7 +26,16 @@ const MuseumCanvas = ({ apiArtistId }) => {
   if (error) {
     return (
       <div className="h-screen w-screen flex items-center justify-center bg-[#03040a] text-white">
-        {error}
+        <div className="text-center max-w-md px-4">
+          <p className="text-lg font-semibold">{error}</p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="mt-4 rounded-full bg-cyan-500 px-4 py-2 text-sm font-semibold text-black"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     );
   }

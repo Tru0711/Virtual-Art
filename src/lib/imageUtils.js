@@ -2,17 +2,7 @@
  * Utility functions for handling image URLs
  */
 
-const API_URL = (() => {
-  if (import.meta.env.VITE_ASSET_URL) {
-    return import.meta.env.VITE_ASSET_URL;
-  }
-
-  if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '');
-  }
-
-  return 'https://virtual-art-backend.onrender.com';
-})();
+import { getAssetBaseUrl, normalizeAbsoluteUrl } from './appConfig';
 
 /**
  * Build full image URL from a relative or absolute path
@@ -21,16 +11,8 @@ const API_URL = (() => {
  */
 export const getImageUrl = (imagePath) => {
   if (!imagePath) return null;
-  
-  // If it's already a full URL, return as-is
-  if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
-    return imagePath;
-  }
-  
-  // If it's a relative path, prepend API URL
-  // Remove leading slash if present to avoid double slashes
-  const cleanPath = imagePath.startsWith('/') ? imagePath.slice(1) : imagePath;
-  return `${API_URL}/${cleanPath}`;
+
+  return normalizeAbsoluteUrl(imagePath, getAssetBaseUrl());
 };
 
 /**

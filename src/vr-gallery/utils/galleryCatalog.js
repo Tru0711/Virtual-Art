@@ -1,3 +1,5 @@
+import { normalizeAbsoluteUrl } from '../../lib/appConfig';
+
 const galleryModelAssets = {
   vr_gallery: {
     url: new URL('../../../Galleries/vr_gallery.glb', import.meta.url).href,
@@ -171,6 +173,51 @@ const pickFrameStyle = (themeKey) => {
 
 const getModelAsset = (modelKey) => galleryModelAssets[modelKey] || galleryModelAssets.vr_gallery;
 
+const galleryModelAssetsByFileName = Object.values(galleryModelAssets).reduce((accumulator, asset) => {
+  try {
+    const fileName = new URL(asset.url).pathname.split('/').pop();
+    if (fileName) {
+      accumulator[fileName] = asset;
+    }
+  } catch (error) {
+    // ignore malformed asset URLs
+  }
+  return accumulator;
+}, {});
+
+export const resolveGalleryModelUrl = (value, fallbackModelKey = 'vr_gallery') => {
+  if (!value) {
+    return getModelAsset(fallbackModelKey).url;
+  }
+
+  const text = String(value).trim();
+  if (!text) {
+    return getModelAsset(fallbackModelKey).url;
+  }
+
+  if (/^(https?:)?\/\//i.test(text) || text.startsWith('blob:') || text.startsWith('data:')) {
+    return text.startsWith('//') ? `https:${text}` : text;
+  }
+
+  const fileName = text.split(/[\\/]/).pop();
+  if (fileName && galleryModelAssetsByFileName[fileName]) {
+    return galleryModelAssetsByFileName[fileName].url;
+  }
+
+  if (galleryModelAssets[text]) {
+    return galleryModelAssets[text].url;
+  }
+
+  if (text.startsWith('/')) {
+    const fromBase = normalizeAbsoluteUrl(text, typeof window !== 'undefined' ? window.location.origin : '');
+    if (fromBase) {
+      return fromBase;
+    }
+  }
+
+  return getModelAsset(fallbackModelKey).url;
+};
+
 export const fallbackGalleryCatalog = [
   {
     id: 1,
@@ -230,6 +277,7 @@ export function buildGalleryProfile(gallery = {}, artworkCount = 0) {
   const modelKey = gallery.modelKey || gallery.model_key || pickModelKey(slug);
   const palette = gallery.palette || galleryThemeCatalog[themeKey] || galleryThemeCatalog.modern;
   const modelAsset = getModelAsset(modelKey);
+  const resolvedModelUrl = resolveGalleryModelUrl(gallery.modelUrl || gallery.model_url || modelAsset.url, modelKey);
   const roomSize = Math.max(18, 16 + Math.ceil(artworkCount / 4) * 3);
 
   return {
@@ -238,7 +286,7 @@ export function buildGalleryProfile(gallery = {}, artworkCount = 0) {
     name,
     themeKey,
     modelKey,
-    modelUrl: modelAsset.url,
+    modelUrl: resolvedModelUrl,
     modelScale: modelAsset.scale,
     palette,
     frameStyle: gallery.frameStyle || gallery.frame_style || pickFrameStyle(themeKey),

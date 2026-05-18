@@ -1,11 +1,15 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
 
-const localUri = 'mongodb://127.0.0.1:27017/visualart';
-const atlasUri = process.env.MONGODB_URI || 'mongodb+srv://srujanatoukare:Srujana123@cluster0.cp7lq.mongodb.net/virtual?appName=Cluster0';
+const localUri = process.env.LOCAL_MONGODB_URI || 'mongodb://127.0.0.1:27017/visualart';
+const atlasUri = process.env.MONGODB_URI;
 
 async function migrate() {
   try {
+    if (!atlasUri) {
+      throw new Error('MONGODB_URI is required for Atlas migration');
+    }
+
     console.log('Connecting to local MongoDB...');
     const localConn = mongoose.createConnection(localUri);
     await new Promise((resolve, reject) => {
