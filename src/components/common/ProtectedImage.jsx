@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { DEFAULT_ARTWORK_IMAGE_URL, getImageUrl } from '../../lib/imageUtils';
 
 /**
  * Protected Image Component with security features
@@ -17,6 +18,29 @@ const ProtectedImage = ({
   style = {}
 }) => {
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [renderedSrc, setRenderedSrc] = useState(() => getImageUrl(src));
+  const [hasError, setHasError] = useState(false);
+
+  const resolvedSrc = useMemo(() => getImageUrl(src), [src]);
+
+  useEffect(() => {
+    setRenderedSrc(resolvedSrc || DEFAULT_ARTWORK_IMAGE_URL);
+    setHasError(false);
+    setImageLoaded(false);
+  }, [resolvedSrc]);
+
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
+      console.debug('[ProtectedImage] render', {
+        originalSrc: src,
+        resolvedSrc,
+        renderedSrc,
+        hasError,
+        overlayText,
+      });
+    }
+  }, [src, resolvedSrc, renderedSrc, hasError, overlayText]);
 
   useEffect(() => {
     // Disable right-click on the entire document when component is mounted
@@ -74,12 +98,20 @@ const ProtectedImage = ({
     <div className="relative inline-block w-full h-full select-none" style={{ userSelect: 'none', ...style }}>
       {/* Main Image */}
       <img
-        src={src}
+        src={renderedSrc || DEFAULT_ARTWORK_IMAGE_URL}
         alt={alt}
         className={className}
         onContextMenu={(e) => e.preventDefault()}
         onDragStart={(e) => e.preventDefault()}
-        onError={onError}
+        onError={(event) => {
+          if (renderedSrc !== DEFAULT_ARTWORK_IMAGE_URL) {
+            setRenderedSrc(DEFAULT_ARTWORK_IMAGE_URL);
+            return;
+          }
+
+          setHasError(true);
+          onError?.(event);
+        }}
         onLoad={() => setImageLoaded(true)}
         draggable="false"
         style={{
@@ -118,7 +150,7 @@ const ProtectedImage = ({
       )}
       
       {/* Optional Protection Notice */}
-      {showProtectionNotice && imageLoaded && (
+      {showProtectionNotice && imageLoaded && !hasError && (
         <div className="absolute top-2 right-2 bg-black/70 text-white text-xs px-3 py-1 rounded-full backdrop-blur-sm">
           <span className="flex items-center gap-1">
             <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">

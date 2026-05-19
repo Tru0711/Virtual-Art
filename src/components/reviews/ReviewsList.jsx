@@ -1,6 +1,6 @@
 import React from 'react';
 import { Star } from 'lucide-react';
-import { getImageUrl } from '../../lib/imageUtils';
+import { DEFAULT_ARTWORK_IMAGE_URL, getImageUrl } from '../../lib/imageUtils';
 
 const ReviewsList = ({ reviews = [], ratingBreakdown = null, avgRating = 0, totalReviews = 0 }) => {
   const formatDate = (dateString) => {
@@ -111,6 +111,9 @@ const ReviewsList = ({ reviews = [], ratingBreakdown = null, avgRating = 0, tota
                           src={getImageUrl(review.artwork_id.image_url)}
                           alt={review.artwork_id.title}
                           className="w-8 h-8 rounded-md object-cover"
+                          onError={(event) => {
+                            event.currentTarget.src = DEFAULT_ARTWORK_IMAGE_URL;
+                          }}
                         />
                       )}
                     </div>

@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'react-hot-toast';
-import { getImageUrl } from '../../lib/imageUtils';
+import { DEFAULT_ARTWORK_IMAGE_URL, getImageUrl } from '../../lib/imageUtils';
 import { getSplitAmounts, getFormattedRupee } from '../../lib/pricing';
 
 const Checkout = () => {
@@ -269,7 +269,14 @@ const Checkout = () => {
         <div className="space-y-3">
           {lineItems.map((item) => (
             <div key={item.artwork._id} className="rounded-lg border border-gray-100 bg-gray-50 p-3 flex gap-3">
-              <img src={getImageUrl(item.artwork.image_url)} alt={item.artwork.title} className="w-16 h-16 rounded-md object-cover" />
+              <img
+                src={getImageUrl(item.artwork.image_url)}
+                alt={item.artwork.title}
+                className="w-16 h-16 rounded-md object-cover"
+                onError={(event) => {
+                  event.currentTarget.src = DEFAULT_ARTWORK_IMAGE_URL;
+                }}
+              />
               <div className="flex-1">
                 <p className="font-semibold text-gray-900">{item.artwork.title}</p>
                 <p className="text-sm text-gray-600">Artist: {item.artwork.artist_id?.artist_name || item.artwork.artist_id?.full_name || 'Artist'}</p>

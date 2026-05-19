@@ -4,6 +4,8 @@
 
 import { getAssetBaseUrl, normalizeAbsoluteUrl } from './appConfig';
 
+export const DEFAULT_ARTWORK_IMAGE_URL = 'https://images.pexels.com/photos/1266808/pexels-photo-1266808.jpeg';
+
 const ARTWORK_FALLBACK_FIELDS = [
   'image_url',
   'image',
@@ -39,9 +41,30 @@ const isPlaceholderUrl = (value) => {
 
 const hasValidProtocol = (value) => /^(https?:)?\/\//i.test(value);
 
+const isLocalhostHostname = (hostname) => hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0';
+
 const isRelativeArtworkPath = (value) => {
   if (!isStringValue(value)) return false;
-  return value.startsWith('/') || value.startsWith('./') || value.startsWith('../');
+  return value.startsWith('/uploads/')
+    || value.startsWith('/storage/')
+    || value.startsWith('./uploads/')
+    || value.startsWith('./storage/')
+    || value.startsWith('../uploads/')
+    || value.startsWith('../storage/');
+};
+
+const rewriteLocalhostUrl = (value) => {
+  if (!isStringValue(value)) return null;
+
+  try {
+    const parsed = new URL(value);
+    const isLocalhost = isLocalhostHostname(parsed.hostname);
+    if (!isLocalhost) return parsed.toString();
+
+    return normalizeAbsoluteUrl(parsed.pathname || '/', getAssetBaseUrl());
+  } catch (error) {
+    return value;
+  }
 };
 
 const normalizeArtworkCandidate = (value) => {
@@ -52,12 +75,14 @@ const normalizeArtworkCandidate = (value) => {
   if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) return null;
 
   if (hasValidProtocol(trimmed)) {
-    const absolute = normalizeAbsoluteUrl(trimmed, getAssetBaseUrl());
+    const rewritten = rewriteLocalhostUrl(trimmed);
+    const absolute = normalizeAbsoluteUrl(rewritten, getAssetBaseUrl());
     return isPlaceholderUrl(absolute) ? null : absolute;
   }
 
   if (isRelativeArtworkPath(trimmed)) {
-    return null;
+    const absolute = normalizeAbsoluteUrl(trimmed, getAssetBaseUrl());
+    return isPlaceholderUrl(absolute) ? null : absolute;
   }
 
   return null;
@@ -72,20 +97,26 @@ export const isValidArtworkImageUrl = (value) => Boolean(normalizeArtworkCandida
  * @returns {string|null} - Full image URL or null if no path provided
  */
 export const getImageUrl = (imagePath) => {
-  if (!imagePath) return null;
+  if (!imagePath) return DEFAULT_ARTWORK_IMAGE_URL;
 
   if (typeof imagePath === 'object') {
-    return resolveArtworkImageUrl(imagePath);
+    return resolveArtworkImageUrl(imagePath) || DEFAULT_ARTWORK_IMAGE_URL;
   }
 
   const text = String(imagePath).trim();
-  if (!text || text.startsWith('data:') || text.startsWith('blob:')) return null;
+  if (!text || text.startsWith('data:') || text.startsWith('blob:')) return DEFAULT_ARTWORK_IMAGE_URL;
 
-  if (hasValidProtocol(text)) {
-    return normalizeAbsoluteUrl(text, getAssetBaseUrl());
+  const normalized = normalizeArtworkCandidate(text);
+  if (normalized) {
+    return normalized;
   }
 
-  return normalizeAbsoluteUrl(text, getAssetBaseUrl());
+  if (import.meta.env.DEV) {
+    // eslint-disable-next-line no-console
+    console.debug('[imageUtils] rejected image url', { original: imagePath, fallback: DEFAULT_ARTWORK_IMAGE_URL });
+  }
+
+  return DEFAULT_ARTWORK_IMAGE_URL;
 };
 
 export const resolveArtworkImageUrl = (artwork) => {

@@ -4,6 +4,7 @@ import { ARButton, XR, Controllers, Hands } from '@react-three/xr';
 import { Text, Html } from '@react-three/drei';
 import { X, Eye } from 'lucide-react';
 import * as THREE from 'three';
+import { getImageUrl } from '../../lib/imageUtils';
 
 
 const ARArtwork = ({ imageUrl, title, onClose }) => {
@@ -102,7 +103,7 @@ const ARPreview = ({ artwork, onClose }) => {
             </Html>
           }>
             <ARArtwork
-              imageUrl={artwork.image_url || 'https://images.pexels.com/photos/1266808/pexels-photo-1266808.jpeg'}
+              imageUrl={getImageUrl(artwork.image_url)}
               title={artwork.title}
               onClose={onClose}
             />

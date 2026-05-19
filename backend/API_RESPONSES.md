@@ -15,7 +15,7 @@
     "description": "A modern abstract piece...",
     "category": "digital",
     "price": 5000,
-    "image_url": "http://localhost:5000/uploads/1234567890-artwork.jpg",
+    "image_url": "https://virtual-art-backend.onrender.com/uploads/1234567890-artwork.jpg",
     "imageHash": "a1b2c3d4e5f6789...64chars",
     "perceptualHash": "1f3a5b7c9d2e4f6a",
     "artist_id": {

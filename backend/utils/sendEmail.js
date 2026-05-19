@@ -1,83 +1,245 @@
 const nodemailer = require('nodemailer');
 
-let transportPromise;
+const DEFAULT_SMTP_HOST = 'smtp-relay.brevo.com';
+const DEFAULT_SMTP_PORT = 587;
+const DEFAULT_SMTP_SECURE = false;
+const DEFAULT_SEND_TIMEOUT_MS = 8000;
+const DEFAULT_VERIFY_TIMEOUT_MS = 10000;
+const DEFAULT_DEDUPE_WINDOW_MS = 10000;
+
+let transporterPromise;
+const inflightEmailSends = new Map();
+const recentlySentEmails = new Map();
+
+const readBoolean = (value, fallback = false) => {
+  if (value === undefined || value === null || value === '') return fallback;
+  return String(value).toLowerCase() === 'true';
+};
+
+const readNumber = (value, fallback) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const getSmtpConfig = () => {
+  const host = process.env.BREVO_SMTP_HOST || process.env.SMTP_HOST || DEFAULT_SMTP_HOST;
+  const port = readNumber(process.env.BREVO_SMTP_PORT || process.env.SMTP_PORT, DEFAULT_SMTP_PORT);
+  const secure = readBoolean(process.env.BREVO_SMTP_SECURE ?? process.env.SMTP_SECURE, DEFAULT_SMTP_SECURE);
+  const user = process.env.BREVO_SMTP_USER || process.env.SMTP_USER || process.env.EMAIL_ADDRESS;
+  const pass = process.env.BREVO_SMTP_PASS || process.env.SMTP_PASS || process.env.EMAIL_PASSWORD || process.env.APP_PASSWORD;
+  const from = process.env.BREVO_SMTP_FROM || process.env.SMTP_FROM || process.env.EMAIL_FROM || user;
+  const sendTimeoutMs = readNumber(process.env.SMTP_SEND_TIMEOUT_MS || process.env.SMTP_TIMEOUT_MS, DEFAULT_SEND_TIMEOUT_MS);
+  const verifyTimeoutMs = readNumber(process.env.SMTP_VERIFY_TIMEOUT_MS, DEFAULT_VERIFY_TIMEOUT_MS);
+  const dedupeWindowMs = readNumber(process.env.EMAIL_DEDUPE_WINDOW_MS, DEFAULT_DEDUPE_WINDOW_MS);
+
+  return {
+    host,
+    port,
+    secure,
+    user,
+    pass,
+    from,
+    sendTimeoutMs,
+    verifyTimeoutMs,
+    dedupeWindowMs,
+  };
+};
+
+const redactEmailAddress = (value) => {
+  if (!value) return 'MISSING';
+  return String(value).replace(/(^.).*(@.*$)/, '$1***$2');
+};
+
+const withTimeout = (promise, timeoutMs, label) => {
+  let timeoutId;
+
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      const error = new Error(`${label} timed out after ${timeoutMs}ms`);
+      error.code = 'EMAIL_TIMEOUT';
+      error.statusCode = 504;
+      reject(error);
+    }, timeoutMs);
+  });
+
+  return Promise.race([
+    promise.finally(() => clearTimeout(timeoutId)),
+    timeoutPromise,
+  ]);
+};
+
+const buildEmailError = (error, stage) => {
+  if (error?.code === 'EMAIL_TIMEOUT') {
+    return error;
+  }
+
+  const normalized = new Error(error?.message || `Failed to ${stage} email`);
+  normalized.code = error?.code || 'EMAIL_SEND_FAILED';
+  normalized.statusCode = error?.responseCode && error.responseCode >= 500 ? 503 : 502;
+  normalized.publicMessage =
+    stage === 'verify'
+      ? 'Email service verification failed. Check your SMTP credentials.'
+      : 'Email delivery is temporarily unavailable. Please try again.';
+  normalized.responseCode = error?.responseCode;
+  normalized.response = error?.response;
+  normalized.command = error?.command;
+  normalized.cause = error;
+  return normalized;
+};
+
+const cleanupRecentCache = (dedupeWindowMs) => {
+  const cutoff = Date.now() - dedupeWindowMs;
+  for (const [key, value] of recentlySentEmails.entries()) {
+    if (value.sentAt < cutoff) {
+      recentlySentEmails.delete(key);
+    }
+  }
+};
 
 const getTransport = async () => {
-  if (!transportPromise) {
-    transportPromise = (async () => {
-      const host = process.env.SMTP_HOST;
-      const port = Number(process.env.SMTP_PORT || 587);
-      const user = process.env.SMTP_USER || process.env.EMAIL_ADDRESS;
-      const pass = process.env.SMTP_PASS || process.env.EMAIL_PASSWORD || process.env.APP_PASSWORD;
+  if (!transporterPromise) {
+    transporterPromise = (async () => {
+      const config = getSmtpConfig();
 
-      console.log('=== SMTP Configuration ===');
-      console.log('SMTP_HOST:', host ? 'SET' : 'MISSING');
-      console.log('SMTP_PORT:', port);
-      console.log('SMTP_USER:', user ? user : 'MISSING');
-      console.log('SMTP_PASS:', pass ? '***SET***' : 'MISSING');
-
-      if (!host || !user || !pass) {
-        throw new Error('SMTP configuration is missing. Please set SMTP_HOST, SMTP_PORT, and either SMTP_USER/SMTP_PASS or EMAIL_ADDRESS with EMAIL_PASSWORD/APP_PASSWORD.');
-      }
-
-      const secure = String(process.env.SMTP_SECURE || '').toLowerCase() === 'true' || port === 465;
-      console.log('SMTP_SECURE:', secure);
-
-      const transporter = nodemailer.createTransport({
-        host,
-        port,
-        secure,
-        auth: { user, pass },
-        debug: true, // Enable debug output
-        logger: true // Enable logger
+      console.info('[email] SMTP configuration', {
+        provider: 'brevo',
+        host: config.host,
+        port: config.port,
+        secure: config.secure,
+        user: redactEmailAddress(config.user),
+        fromConfigured: Boolean(config.from),
+        sendTimeoutMs: config.sendTimeoutMs,
+        verifyTimeoutMs: config.verifyTimeoutMs,
       });
 
-      // Verify transporter configuration
+      if (!config.host || !config.user || !config.pass || !config.from) {
+        throw new Error('Missing SMTP configuration. Set BREVO_SMTP_HOST, BREVO_SMTP_PORT, BREVO_SMTP_USER, BREVO_SMTP_PASS, and BREVO_SMTP_FROM in Render.');
+      }
+
+      const transporter = nodemailer.createTransport({
+        host: config.host,
+        port: config.port,
+        secure: config.secure,
+        auth: {
+          user: config.user,
+          pass: config.pass,
+        },
+        pool: true,
+        maxConnections: 2,
+        maxMessages: 50,
+        connectionTimeout: config.sendTimeoutMs,
+        greetingTimeout: config.sendTimeoutMs,
+        socketTimeout: config.sendTimeoutMs,
+        tls: {
+          rejectUnauthorized: true,
+        },
+      });
+
       try {
-        await transporter.verify();
-        console.log('✅ SMTP transporter verified successfully');
-      } catch (verifyError) {
-        console.error('❌ SMTP transporter verification failed:', verifyError.message);
-        throw verifyError;
+        await withTimeout(transporter.verify(), config.verifyTimeoutMs, 'SMTP verification');
+        console.info('[email] SMTP transporter verified successfully', {
+          provider: 'brevo',
+          host: config.host,
+          port: config.port,
+        });
+      } catch (error) {
+        transporterPromise = undefined;
+        throw buildEmailError(error, 'verify');
       }
 
       return transporter;
-    })();
+    })().catch((error) => {
+      transporterPromise = undefined;
+      throw error;
+    });
   }
 
-  return transportPromise;
+  return transporterPromise;
 };
 
-const sendEmail = async ({ to, subject, text, html }) => {
-  console.log('=== SENDING EMAIL ===');
-  console.log('To:', to);
-  console.log('Subject:', subject);
-  
-  const from = process.env.SMTP_FROM || process.env.SMTP_USER || process.env.EMAIL_ADDRESS;
-  if (!from) {
-    throw new Error('SMTP_FROM is missing. Please set SMTP_FROM environment variable.');
-  }
-  console.log('From:', from);
+const buildEmailKey = ({ to, subject, text, html }) => [to, subject, text || '', html || ''].join('|');
 
-  const transport = await getTransport();
-  
-  try {
-    const info = await transport.sendMail({ 
-      from, 
-      to, 
-      subject, 
-      text, 
-      html 
+const sendEmail = async ({ to, subject, text, html, from: fromOverride }) => {
+  const config = getSmtpConfig();
+  const from = fromOverride || config.from;
+
+  if (!from) {
+    throw new Error('Missing SMTP_FROM configuration. Set BREVO_SMTP_FROM in Render.');
+  }
+
+  const emailKey = buildEmailKey({ to, subject, text, html });
+  cleanupRecentCache(config.dedupeWindowMs);
+
+  if (recentlySentEmails.has(emailKey)) {
+    const cached = recentlySentEmails.get(emailKey);
+    console.info('[email] deduplicated recently-sent email', {
+      to,
+      subject,
+      messageId: cached.messageId || 'cached',
     });
-    
-    console.log('✅ Email sent successfully');
-    console.log('Message ID:', info.messageId);
-    console.log('Response:', info.response);
-    
-    return info;
-  } catch (error) {
-    console.error('❌ Failed to send email:', error.message);
-    throw error;
+    return cached.info;
+  }
+
+  if (inflightEmailSends.has(emailKey)) {
+    console.info('[email] joining in-flight send', { to, subject });
+    return inflightEmailSends.get(emailKey);
+  }
+
+  console.info('[email] sending email', {
+    provider: 'brevo',
+    to,
+    subject,
+    from,
+  });
+
+  const sendPromise = (async () => {
+    const transporter = await getTransport();
+
+    try {
+      const info = await withTimeout(
+        transporter.sendMail({
+          from,
+          to,
+          subject,
+          text,
+          html,
+        }),
+        config.sendTimeoutMs,
+        'SMTP send'
+      );
+
+      console.info('[email] sent successfully', {
+        to,
+        subject,
+        messageId: info.messageId,
+        response: info.response,
+      });
+
+      recentlySentEmails.set(emailKey, {
+        sentAt: Date.now(),
+        messageId: info.messageId,
+        info,
+      });
+
+      return info;
+    } catch (error) {
+      console.error('[email] send failed', {
+        to,
+        subject,
+        code: error?.code,
+        message: error?.message,
+      });
+
+      throw buildEmailError(error, 'send');
+    }
+  })();
+
+  inflightEmailSends.set(emailKey, sendPromise);
+
+  try {
+    return await sendPromise;
+  } finally {
+    inflightEmailSends.delete(emailKey);
   }
 };
 
@@ -88,10 +250,10 @@ const sendCertificateEmail = async (artistEmail, artistName, level, artworkCount
   const levelInfo = {
     bronze: { displayName: 'Bronze', emoji: '🥉', color: '#CD7F32' },
     silver: { displayName: 'Silver', emoji: '🥈', color: '#C0C0C0' },
-    gold: { displayName: 'Gold', emoji: '🥇', color: '#FFD700' }
+    gold: { displayName: 'Gold', emoji: '🥇', color: '#FFD700' },
   };
 
-  const info = levelInfo[level.toLowerCase()] || { displayName: level, emoji: '🎖️', color: '#D3D3D3' };
+  const info = levelInfo[String(level || '').toLowerCase()] || { displayName: level, emoji: '🎖️', color: '#D3D3D3' };
 
   const html = `
     <!DOCTYPE html>
@@ -154,7 +316,7 @@ const sendCertificateEmail = async (artistEmail, artistName, level, artworkCount
             <p>You can now download your certificate from your artist dashboard. Display it proudly to showcase your achievements!</p>
 
             <center>
-              <a href="${process.env.FRONTEND_URL || 'https://virtual-art-psi.vercel.app'}/artist/certificates" class="cta-button">View Your Certificate</a>
+              <a href="${(process.env.FRONTEND_URL || 'https://virtual-art-psi.vercel.app').replace(/\/$/, '')}/artist/certificates" class="cta-button">View Your Certificate</a>
             </center>
 
             <p style="margin-top: 30px;">Keep creating and pushing the boundaries of artistic expression. The next milestone awaits!</p>
@@ -175,7 +337,7 @@ const sendCertificateEmail = async (artistEmail, artistName, level, artworkCount
     to: artistEmail,
     subject: `🎉 Congratulations! You've Earned Your ${info.displayName} Level Certificate!`,
     text: `Congratulations! You have achieved the ${info.displayName} level certificate with ${artworkCount} approved artworks. Visit your dashboard to download it.`,
-    html
+    html,
   });
 };
 
@@ -186,10 +348,10 @@ const sendCertificateRevocationEmail = async (artistEmail, artistName, level, re
   const levelInfo = {
     bronze: 'Bronze',
     silver: 'Silver',
-    gold: 'Gold'
+    gold: 'Gold',
   };
 
-  const displayLevel = levelInfo[level.toLowerCase()] || level;
+  const displayLevel = levelInfo[String(level || '').toLowerCase()] || level;
 
   const html = `
     <!DOCTYPE html>
@@ -236,8 +398,12 @@ const sendCertificateRevocationEmail = async (artistEmail, artistName, level, re
     to: artistEmail,
     subject: `Certificate Revocation Notice - ${displayLevel} Level`,
     text: `Your ${displayLevel} Level Certificate has been revoked. Reason: ${reason || 'Not specified'}`,
-    html
+    html,
   });
 };
 
-module.exports = { sendEmail, sendCertificateEmail, sendCertificateRevocationEmail };
+module.exports = {
+  sendEmail,
+  sendCertificateEmail,
+  sendCertificateRevocationEmail,
+};

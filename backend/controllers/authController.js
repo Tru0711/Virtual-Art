@@ -12,6 +12,20 @@ const normalizeEmail = (email = '') => email.trim().toLowerCase();
 
 const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 
+const getEmailErrorResponse = (error) => {
+  if (error?.code === 'EMAIL_TIMEOUT') {
+    return {
+      status: 504,
+      message: 'Password reset email timed out. Please try again.',
+    };
+  }
+
+  return {
+    status: error?.statusCode || 503,
+    message: error?.publicMessage || 'Email service is temporarily unavailable. Please try again.',
+  };
+};
+
 const isStrongPassword = (password = '') => {
   if (password.length < 8) return false;
   if (!/\d/.test(password)) return false;
@@ -224,20 +238,28 @@ const forgotPassword = async (req, res) => {
         </html>
       `;
 
-      // Send email
       console.log('Attempting to send email to:', user.email);
       try {
-        await sendEmail({ 
-          to: user.email, 
-          subject, 
-          text, 
-          html 
+        await sendEmail({
+          to: user.email,
+          subject,
+          text,
+          html,
         });
         console.log('✅ Email sent successfully to:', user.email);
       } catch (mailError) {
         console.error('❌ Failed to send email:', mailError.message);
         console.error('Email error stack:', mailError.stack);
-        // Continue with success response even if email fails (security best practice)
+
+        user.resetPasswordToken = undefined;
+        user.resetPasswordExpire = undefined;
+        await user.save();
+
+        const emailError = getEmailErrorResponse(mailError);
+        return res.status(emailError.status).json({
+          success: false,
+          message: emailError.message,
+        });
       }
     } else {
       console.log('No user found with email:', normalizedEmail);

@@ -11,6 +11,32 @@ const OTP_COOLDOWN_SECONDS = Number(process.env.OTP_COOLDOWN_SECONDS || 60);
 const OTP_MAX_ATTEMPTS = Number(process.env.OTP_MAX_ATTEMPTS || 3);
 const RESET_SESSION_EXPIRES_MINUTES = Number(process.env.RESET_SESSION_EXPIRES_MINUTES || 10);
 
+const getEmailErrorResponse = (error) => {
+  if (error?.code === 'EMAIL_TIMEOUT') {
+    return {
+      status: 504,
+      message: 'Email delivery timed out. Please try again in a moment.',
+    };
+  }
+
+  return {
+    status: error?.statusCode || 503,
+    message: error?.publicMessage || 'Email service is temporarily unavailable. Please try again.',
+  };
+};
+
+const rollbackOtpRecord = async (email, purpose) => {
+  try {
+    await OtpVerification.deleteOne({ email, purpose });
+  } catch (error) {
+    console.warn('[otp] failed to rollback OTP record after email failure', {
+      email,
+      purpose,
+      error: error.message,
+    });
+  }
+};
+
 const signAuthToken = (user) => {
   return jwt.sign(
     { userId: user._id, tokenVersion: user.tokenVersion || 0 },
@@ -164,12 +190,25 @@ const sendOtp = async (req, res) => {
       metadata,
     });
 
-    await sendOtpEmail({
-      email: normalizedEmail,
-      otp,
-      purpose: flowPurpose,
-      name: full_name,
-    });
+    try {
+      await sendOtpEmail({
+        email: normalizedEmail,
+        otp,
+        purpose: flowPurpose,
+        name: full_name,
+      });
+    } catch (error) {
+      await rollbackOtpRecord(normalizedEmail, flowPurpose);
+      const emailError = getEmailErrorResponse(error);
+      console.error('Send signup OTP email failed:', {
+        email: normalizedEmail,
+        purpose: flowPurpose,
+        code: error?.code,
+        statusCode: emailError.status,
+        message: error?.message,
+      });
+      return res.status(emailError.status).json({ message: emailError.message });
+    }
 
     return res.json({
       success: true,
@@ -224,12 +263,24 @@ const forgotPasswordOtp = async (req, res) => {
       },
     });
 
-    await sendOtpEmail({
-      email: normalizedEmail,
-      otp,
-      purpose: 'forgot_password',
-      name: user.full_name,
-    });
+    try {
+      await sendOtpEmail({
+        email: normalizedEmail,
+        otp,
+        purpose: 'forgot_password',
+        name: user.full_name,
+      });
+    } catch (error) {
+      await rollbackOtpRecord(normalizedEmail, 'forgot_password');
+      const emailError = getEmailErrorResponse(error);
+      console.error('Forgot password OTP email failed:', {
+        email: normalizedEmail,
+        code: error?.code,
+        statusCode: emailError.status,
+        message: error?.message,
+      });
+      return res.status(emailError.status).json({ message: emailError.message });
+    }
 
     return res.json({
       success: true,
@@ -288,12 +339,25 @@ const resendOtp = async (req, res) => {
       metadata,
     });
 
-    await sendOtpEmail({
-      email: normalizedEmail,
-      otp,
-      purpose,
-      name: metadata.full_name,
-    });
+    try {
+      await sendOtpEmail({
+        email: normalizedEmail,
+        otp,
+        purpose,
+        name: metadata.full_name,
+      });
+    } catch (error) {
+      await rollbackOtpRecord(normalizedEmail, purpose);
+      const emailError = getEmailErrorResponse(error);
+      console.error('Resend OTP email failed:', {
+        email: normalizedEmail,
+        purpose,
+        code: error?.code,
+        statusCode: emailError.status,
+        message: error?.message,
+      });
+      return res.status(emailError.status).json({ message: emailError.message });
+    }
 
     return res.json({
       success: true,

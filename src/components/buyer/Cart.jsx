@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../lib/api';
-import { getImageUrl } from '../../lib/imageUtils';
+import { DEFAULT_ARTWORK_IMAGE_URL, getImageUrl } from '../../lib/imageUtils';
 import { toast } from 'react-hot-toast';
 import { getBuyerPrice, getSplitAmounts, getFormattedRupee } from '../../lib/pricing';
 
@@ -337,7 +337,14 @@ const Cart = () => {
                     }}
                     className="cursor-pointer w-24 h-24 flex items-center justify-center border border-gray-300 rounded overflow-hidden"
                   >
-                    <img className="max-w-full h-full object-cover" src={getImageUrl(artwork.image_url)} alt={artwork.title} />
+                    <img
+                      className="max-w-full h-full object-cover"
+                      src={getImageUrl(artwork.image_url)}
+                      alt={artwork.title}
+                      onError={(event) => {
+                        event.currentTarget.src = DEFAULT_ARTWORK_IMAGE_URL;
+                      }}
+                    />
                   </div>
                   <div>
                     <p className="hidden md:block font-semibold">{artwork.title}</p>

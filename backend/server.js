@@ -4,9 +4,9 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const dotenv = require('dotenv');
 const path = require('path');
-const User = require('./models/User');
+const { connectDatabase, getMongoConnectionState } = require('./config/database');
 
-dotenv.config();
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 const app = express();
 app.set('trust proxy', true);
@@ -159,29 +159,25 @@ if (!mongoUri && process.env.NODE_ENV === 'production') {
   process.exit(1);
 }
 
-const connectMongo = async () => {
-  try {
-    if (!mongoUri) {
-      throw new Error('MONGODB_URI is not defined. Please set it in your .env file.');
-    }
-    await mongoose.connect(mongoUri, {
-      serverSelectionTimeoutMS: 30000,
-      connectTimeoutMS: 30000,
-      socketTimeoutMS: 45000,
-      bufferCommands: false,
-    });
-    const dbName = (mongoUri.includes('/') ? mongoUri.split('/').pop().split('?')[0] : '(unknown)') || '(unknown)';
-    void dbName;
-  } catch (err) {
-    console.error('❌ MongoDB connection error:', err.message);
-    throw err;
-  }
-};
-
 const http = require('http');
 const { Server } = require('socket.io');
 
-const startServer = async () => {
+const registerSocketHandlers = (io) => {
+  io.on('connection', (socket) => {
+    try {
+      socket.on('joinOrderRoom', (orderId) => {
+        if (orderId) socket.join(`order:${orderId}`);
+      });
+      socket.on('leaveOrderRoom', (orderId) => {
+        if (orderId) socket.leave(`order:${orderId}`);
+      });
+    } catch (e) {
+      console.warn('Socket room handler error:', e?.message || e);
+    }
+  });
+};
+
+const createServer = () => {
   const server = http.createServer(app);
 
   const io = new Server(server, {
@@ -196,31 +192,10 @@ const startServer = async () => {
   });
 
   app.locals.io = io;
+  registerSocketHandlers(io);
 
-  io.on('connection', (socket) => {
-    try {
-      socket.on('joinOrderRoom', (orderId) => {
-        if (orderId) socket.join(`order:${orderId}`);
-      });
-      socket.on('leaveOrderRoom', (orderId) => {
-        if (orderId) socket.leave(`order:${orderId}`);
-      });
-    } catch (e) {
-      console.warn('Socket room handler error:', e?.message || e);
-    }
-  });
-
-  server.listen(PORT, HOST, async () => {
-    if (process.env.NODE_ENV !== 'production') {
-      console.log(`Server running on http://${HOST}:${PORT}`);
-    }
-    await connectMongo();
-  });
+  return server;
 };
-
-startServer().catch((err) => {
-  console.error('❌ Server failed to start:', err.message);
-});
 
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/profiles', require('./routes/profiles'));
@@ -238,6 +213,21 @@ app.use('/api/admin', require('./routes/admin'));
 app.use('/api/certificates', require('./routes/certificates'));
 app.use('/api/museum', require('./routes/museum'));
 
+app.use('/api', (req, res, next) => {
+  if (req.path === '/health' || req.path === '/ping-cors') {
+    return next();
+  }
+
+  if (mongoose.connection.readyState === 1) {
+    return next();
+  }
+
+  return res.status(503).json({
+    message: 'Database connection is not ready yet. Please retry shortly.',
+    db: getMongoConnectionState(),
+  });
+});
+
 app.use((err, req, res, next) => {
   if (!err) {
     return next();
@@ -248,13 +238,7 @@ app.use((err, req, res, next) => {
 });
 
 app.get('/api/health', (req, res) => {
-  const state = mongoose.connection.readyState;
-  const mongoState =
-    state === 1 ? 'connected' :
-    state === 2 ? 'connecting' :
-    state === 3 ? 'disconnecting' :
-    'disconnected';
-  res.json({ status: 'OK', message: 'VisualArt Backend is running', mongo: mongoState });
+  res.json({ status: 'OK', message: 'VisualArt Backend is running', mongo: getMongoConnectionState() });
 });
 
 // Diagnostic route to verify CORS headers from deployed environment
@@ -269,5 +253,27 @@ app.get('/api/ping-cors', (req, res) => {
   }
   res.json({ ok: true, origin, allowed });
 });
+
+const bootstrap = async () => {
+  try {
+    console.log('[startup] connecting to MongoDB...');
+    await connectDatabase(mongoUri);
+    console.log('[startup] MongoDB connection ready; starting HTTP server...');
+
+    const server = createServer();
+    server.listen(PORT, HOST, () => {
+      console.log(`[startup] server listening on http://${HOST}:${PORT}`);
+    });
+
+    return server;
+  } catch (error) {
+    console.error('[startup] failed to initialize application:', error.message);
+    process.exit(1);
+  }
+};
+
+if (require.main === module) {
+  bootstrap();
+}
 
 module.exports = app;

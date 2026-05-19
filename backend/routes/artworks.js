@@ -51,20 +51,43 @@ const toAbsoluteUrl = (req, value) => {
   return `${req.protocol}://${req.get('host')}${clean}`;
 };
 
+const rewriteLegacyLocalhostUrl = (req, value) => {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  if (!/^https?:\/\//i.test(trimmed)) {
+    return toAbsoluteUrl(req, trimmed);
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    const isLocalhost = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+    if (!isLocalhost) {
+      return parsed.toString();
+    }
+
+    const cleanPath = parsed.pathname || '/';
+    return toAbsoluteUrl(req, cleanPath);
+  } catch (error) {
+    return null;
+  }
+};
+
 const isRenderableArtworkUrl = (value) => {
   if (typeof value !== 'string') return false;
   const trimmed = value.trim();
   if (!trimmed) return false;
   if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) return false;
-  if (!/^https?:\/\//i.test(trimmed)) return false;
+  if (!/^https?:\/\//i.test(trimmed) && !trimmed.startsWith('/')) return false;
   return !PLACEHOLDER_IMAGE_PATTERNS.some((pattern) => pattern.test(trimmed));
 };
 
-const pickRenderableArtworkUrl = (artwork) => {
+const pickRenderableArtworkUrl = (req, artwork) => {
   for (const field of ARTWORK_IMAGE_FIELDS) {
     const candidate = artwork?.[field];
     if (isRenderableArtworkUrl(candidate)) {
-      return candidate.trim();
+      return rewriteLegacyLocalhostUrl(req, candidate);
     }
   }
   return null;
@@ -110,24 +133,24 @@ const pickArtworkImageValue = (artwork) => (
 
 const normalizeArtworkImages = (req, artwork) => {
   const data = artwork.toObject ? artwork.toObject() : { ...artwork };
-  const imgUrl = pickRenderableArtworkUrl(data);
+  const imgUrl = pickRenderableArtworkUrl(req, data);
   const watermarkedUrl = isRenderableArtworkUrl(data.watermarked_image_url)
-    ? data.watermarked_image_url.trim()
+    ? rewriteLegacyLocalhostUrl(req, data.watermarked_image_url)
     : isRenderableArtworkUrl(data.watermarkedImageUrl)
-      ? data.watermarkedImageUrl.trim()
+      ? rewriteLegacyLocalhostUrl(req, data.watermarkedImageUrl)
       : isRenderableArtworkUrl(data.watermarkedImage)
-        ? data.watermarkedImage.trim()
+        ? rewriteLegacyLocalhostUrl(req, data.watermarkedImage)
         : isRenderableArtworkUrl(data.thumbnail)
-          ? data.thumbnail.trim()
+          ? rewriteLegacyLocalhostUrl(req, data.thumbnail)
           : isRenderableArtworkUrl(data.thumbnail_url)
-            ? data.thumbnail_url.trim()
+            ? rewriteLegacyLocalhostUrl(req, data.thumbnail_url)
             : imgUrl;
   const originalUrl = isRenderableArtworkUrl(data.original_image_url)
-    ? data.original_image_url.trim()
+    ? rewriteLegacyLocalhostUrl(req, data.original_image_url)
     : isRenderableArtworkUrl(data.originalImageUrl)
-      ? data.originalImageUrl.trim()
+      ? rewriteLegacyLocalhostUrl(req, data.originalImageUrl)
       : isRenderableArtworkUrl(data.originalImage)
-        ? data.originalImage.trim()
+        ? rewriteLegacyLocalhostUrl(req, data.originalImage)
         : imgUrl;
 
   data.image_url = imgUrl;
@@ -687,21 +710,22 @@ router.post('/', auth, [
     }
 
     const normalizedImageUrl = imageUrl;
+    const normalizedPublicImageUrl = rewriteLegacyLocalhostUrl(req, normalizedImageUrl) || normalizedImageUrl;
 
     // Create artwork with published status by default
     const artwork = new Artwork({
       ...req.body,
-      image_url: normalizedImageUrl,
-      image: req.body.image || normalizedImageUrl,
-      imageUrl: req.body.imageUrl || normalizedImageUrl,
-      thumbnail: req.body.thumbnail || normalizedImageUrl,
-      thumbnail_url: req.body.thumbnail_url || normalizedImageUrl,
-      watermarked_image_url: req.body.watermarked_image_url || normalizedImageUrl,
-      watermarkedImage: req.body.watermarkedImage || normalizedImageUrl,
-      watermarkedImageUrl: req.body.watermarkedImageUrl || normalizedImageUrl,
-      original_image_url: req.body.original_image_url || normalizedImageUrl,
-      originalImage: req.body.originalImage || normalizedImageUrl,
-      originalImageUrl: req.body.originalImageUrl || normalizedImageUrl,
+      image_url: normalizedPublicImageUrl,
+      image: req.body.image || normalizedPublicImageUrl,
+      imageUrl: req.body.imageUrl || normalizedPublicImageUrl,
+      thumbnail: req.body.thumbnail || normalizedPublicImageUrl,
+      thumbnail_url: req.body.thumbnail_url || normalizedPublicImageUrl,
+      watermarked_image_url: req.body.watermarked_image_url || normalizedPublicImageUrl,
+      watermarkedImage: req.body.watermarkedImage || normalizedPublicImageUrl,
+      watermarkedImageUrl: req.body.watermarkedImageUrl || normalizedPublicImageUrl,
+      original_image_url: req.body.original_image_url || normalizedPublicImageUrl,
+      originalImage: req.body.originalImage || normalizedPublicImageUrl,
+      originalImageUrl: req.body.originalImageUrl || normalizedPublicImageUrl,
       artist_id: artistId,
       gallery_id: galleryContext.galleryId,
       gallery_name: galleryContext.galleryName,

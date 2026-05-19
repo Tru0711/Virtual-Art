@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../lib/api';
 import { getFormattedRupee } from '../../lib/pricing';
-import { getImageUrl } from '../../lib/imageUtils';
+import { DEFAULT_ARTWORK_IMAGE_URL, getImageUrl } from '../../lib/imageUtils';
 // eslint-disable-next-line no-unused-vars
 import Navbar from '../layout/Navbar';
 // eslint-disable-next-line no-unused-vars
@@ -107,6 +107,9 @@ const ArtistProfileDashboard = () => {
                       src={getImageUrl(transaction.artwork_id.image_url)}
                       alt={transaction.artwork_id?.title || 'Artwork'}
                       className="h-14 w-14 rounded-md object-cover border border-gray-200"
+                      onError={(event) => {
+                        event.currentTarget.src = DEFAULT_ARTWORK_IMAGE_URL;
+                      }}
                     />
                   ) : (
                     <div className="h-14 w-14 rounded-md bg-gray-200" />

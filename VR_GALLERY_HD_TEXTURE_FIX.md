@@ -199,9 +199,9 @@ data.original_image_url = toAbsoluteUrl(req, originalUrl);
   artworks: [
     {
       title: "Color Harmony",
-      image_url: "http://localhost:5001/uploads/previews/...-preview.jpg",
-      original_image_url: "http://localhost:5001/storage/originals/....webp",
-      watermarked_image_url: "http://localhost:5001/uploads/previews/...-preview.jpg",
+      image_url: "https://virtual-art-backend.onrender.com/uploads/previews/...-preview.jpg",
+      original_image_url: "https://virtual-art-backend.onrender.com/storage/originals/....webp",
+      watermarked_image_url: "https://virtual-art-backend.onrender.com/uploads/previews/...-preview.jpg",
       // ... other fields
     }
   ]
