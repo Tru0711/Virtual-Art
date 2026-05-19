@@ -3,19 +3,15 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext.jsx';
 import { SocketProvider } from './contexts/SocketContext.jsx';
 import { Toaster } from 'react-hot-toast';
+import LoadingScreen from './components/common/LoadingScreen.jsx';
 
 // Layout Components
 import Navbar from './components/layout/Navbar.jsx';
 import Footer from './components/layout/Footer.jsx';
 
 // Page Components
-import HomePage from './components/pages/HomePage.jsx';
-import SearchPage from './components/pages/SearchPage.jsx';
-import Settings from './components/pages/Settings.jsx';
-import PublicArtistProfile from './components/pages/PublicArtistProfile.jsx';
 import NotFound from './components/pages/NotFound.jsx';
 import { AboutPage, ContactPage, HelpPage, TermsPage, PrivacyPage } from './components/pages/StaticPages.jsx';
-import VRMuseum from './components/pages/VRMuseum.jsx';
 
 // Auth Components
 import LoginSelect from './components/auth/LoginSelect.jsx';
@@ -32,30 +28,34 @@ import ProtectedAdminRoute from './components/admin/ProtectedAdminRoute.jsx';
 
 // Artist Components
 import ArtistAuth from './components/artist/ArtistAuth.jsx';
-import ArtistProfileDashboard from './components/artist/ArtistProfileDashboard.jsx';
-import EditArtistProfile from './components/artist/EditArtistProfile.jsx';
 import Artists from './components/artist/Artists.jsx';
-import ArtistsPage from './components/artist/ArtistsPage.jsx';
-import PaymentSettings from './components/artist/PaymentSettings.jsx';
 import ProtectedArtistRoute from './components/artist/ProtectedArtistRoute.jsx';
 
 // Buyer Components
 import UserProfile from './components/buyer/UserProfile.jsx';
-import UserDashboard from './components/buyer/UserDashboard.jsx';
-import Cart from './components/buyer/Cart.jsx';
-import MyOrders from './components/buyer/MyOrders.jsx';
-import MyPurchases from './components/buyer/MyPurchases.jsx';
 import PaymentSuccess from './components/buyer/PaymentSuccess.jsx';
 import PaymentFailed from './components/buyer/PaymentFailed.jsx';
-import SavedAddresses from './components/buyer/SavedAddresses.jsx';
-import PaymentPreferences from './components/buyer/PaymentPreferences.jsx';
-import Checkout from './components/buyer/Checkout.jsx';
 
 // Artwork Components
 import ArtworkDetails from './components/artworks/ArtworkDetails.jsx';
 
 // Admin - Other
-import AddAddress from './components/buyer/AddAddress.jsx';
+const HomePage = lazy(() => import('./components/pages/HomePage.jsx'));
+const SearchPage = lazy(() => import('./components/pages/SearchPage.jsx'));
+const PublicArtistProfile = lazy(() => import('./components/pages/PublicArtistProfile.jsx'));
+const VRMuseum = lazy(() => import('./components/pages/VRMuseum.jsx'));
+const ArtistsPage = lazy(() => import('./components/artist/ArtistsPage.jsx'));
+const ArtistProfileDashboard = lazy(() => import('./components/artist/ArtistProfileDashboard.jsx'));
+const EditArtistProfile = lazy(() => import('./components/artist/EditArtistProfile.jsx'));
+const PaymentSettings = lazy(() => import('./components/artist/PaymentSettings.jsx'));
+const UserDashboard = lazy(() => import('./components/buyer/UserDashboard.jsx'));
+const Cart = lazy(() => import('./components/buyer/Cart.jsx'));
+const MyOrders = lazy(() => import('./components/buyer/MyOrders.jsx'));
+const MyPurchases = lazy(() => import('./components/buyer/MyPurchases.jsx'));
+const SavedAddresses = lazy(() => import('./components/buyer/SavedAddresses.jsx'));
+const PaymentPreferences = lazy(() => import('./components/buyer/PaymentPreferences.jsx'));
+const Checkout = lazy(() => import('./components/buyer/Checkout.jsx'));
+const AddAddress = lazy(() => import('./components/buyer/AddAddress.jsx'));
 
 const ARView = lazy(() => import('./components/artworks/ARView.jsx'));
 const WebcamAR = lazy(() => import('./components/artworks/WebcamAR.jsx'));
@@ -64,10 +64,14 @@ const MobileAR = lazy(() => import('./components/artworks/MobileAR.jsx'));
 const VRGallery = lazy(() => import('./components/pages/VRGallery.jsx'));
 const VRGallerySelection = lazy(() => import('./components/pages/VRGallerySelection.jsx'));
 
+const routeLoader = <LoadingScreen title="Loading page" subtitle="Fetching content and page state..." />;
+
 const immersiveRouteLoader = (
-  <div className="min-h-screen bg-black text-white flex items-center justify-center px-4">
-    <p className="text-sm">Loading immersive experience...</p>
-  </div>
+  <LoadingScreen
+    variant="immersive"
+    title="Loading immersive experience"
+    subtitle="Preparing models, textures, and controls..."
+  />
 );
 
 function App() {
@@ -78,11 +82,13 @@ function App() {
         <Routes>
           {/* Public Routes with Navbar and Footer */}
           <Route path="/" element={
-            <>
-              <Navbar />
-              <HomePage />
-              <Footer onNavigate={(page) => window.location.href = `/${page}`} />
-            </>
+            <Suspense fallback={routeLoader}>
+              <>
+                <Navbar />
+                <HomePage />
+                <Footer onNavigate={(page) => window.location.href = `/${page}`} />
+              </>
+            </Suspense>
           } />
 
           {/* Static Pages */}
@@ -280,11 +286,13 @@ function App() {
             </Suspense>
           } />
           <Route path="/search" element={
-            <>
-              <Navbar />
-              <SearchPage />
-              <Footer />
-            </>
+            <Suspense fallback={routeLoader}>
+              <>
+                <Navbar />
+                <SearchPage />
+                <Footer />
+              </>
+            </Suspense>
           } />
           <Route path="/gallery" element={
             <ProtectedUserRoute>
@@ -309,20 +317,24 @@ function App() {
           } />
           <Route path="/artists" element={
             <ProtectedUserRoute>
-              <>
-                <Navbar />
-                <ArtistsPage />
-                <Footer onNavigate={(page) => window.location.href = `/${page}`} />
-              </>
+              <Suspense fallback={routeLoader}>
+                <>
+                  <Navbar />
+                  <ArtistsPage />
+                  <Footer onNavigate={(page) => window.location.href = `/${page}`} />
+                </>
+              </Suspense>
             </ProtectedUserRoute>
           } />
           <Route path="/artists/:id" element={
             <ProtectedUserRoute>
-              <>
-                <Navbar />
-                <PublicArtistProfile />
-                <Footer onNavigate={(page) => window.location.href = `/${page}`} />
-              </>
+              <Suspense fallback={routeLoader}>
+                <>
+                  <Navbar />
+                  <PublicArtistProfile />
+                  <Footer onNavigate={(page) => window.location.href = `/${page}`} />
+                </>
+              </Suspense>
             </ProtectedUserRoute>
           } />
           <Route path="/vr-gallery/:artistId/:galleryId" element={

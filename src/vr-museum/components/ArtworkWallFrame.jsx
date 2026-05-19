@@ -1,5 +1,5 @@
 import { memo, useMemo, useState, useEffect } from 'react';
-import * as THREE from 'three';
+import { SRGBColorSpace } from 'three';
 import { RoundedBox, Text, useTexture } from '@react-three/drei';
 
 const FRAME_MATERIALS = {
@@ -27,11 +27,11 @@ export const ArtworkWallFrame = memo(function ArtworkWallFrame({
   const safeUrl = isValidUrl(url) ? url : null;
 
   // Only call useTexture when we have a URL.
-  const texture = useTexture(safeUrl || '');
+  const texture = useTexture(safeUrl || undefined);
 
   useEffect(() => {
     if (!texture || !safeUrl) return;
-    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.colorSpace = SRGBColorSpace;
     texture.anisotropy = 8;
     texture.needsUpdate = true;
   }, [texture, safeUrl]);

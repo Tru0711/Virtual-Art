@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useGalleryData } from '../../vr-gallery/hooks/useGalleryData';
 import { buildGalleryCatalog } from '../../vr-gallery/utils/galleryCatalog';
+import { preloadBinaryAsset } from '../../vr-gallery/utils/preloadAsset';
 
 const VRGallerySelection = () => {
   const { artistId } = useParams();
@@ -45,7 +46,13 @@ const VRGallerySelection = () => {
               <button
                 key={gallery.id || gallery.slug}
                 type="button"
-                onClick={() => navigate(`/vr-gallery/${artistId}/${gallery.slug}`)}
+                onClick={() => {
+                  void preloadBinaryAsset(gallery.modelUrl || gallery.model_url || '');
+                  navigate(`/vr-gallery/${artistId}/${gallery.slug}`);
+                }}
+                onFocus={() => {
+                  void preloadBinaryAsset(gallery.modelUrl || gallery.model_url || '');
+                }}
                 className="group text-left rounded-[1.5rem] border border-white/10 bg-white/6 backdrop-blur-xl overflow-hidden transition-transform duration-300 hover:-translate-y-1 hover:border-cyan-300/40"
               >
                 <div

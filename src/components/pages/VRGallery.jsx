@@ -1,7 +1,9 @@
-import { useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useGalleryData } from '../../vr-gallery/hooks/useGalleryData';
-import GalleryScene from '../../vr-gallery/GalleryScene';
+import LoadingScreen from '../common/LoadingScreen.jsx';
+
+const GalleryScene = lazy(() => import('../../vr-gallery/GalleryScene'));
 
 const VRGallery = () => {
   const { artistId, galleryId } = useParams();
@@ -12,14 +14,7 @@ const VRGallery = () => {
   const galleryLabel = useMemo(() => gallery?.name || gallery?.slug || galleryId || 'Gallery', [gallery, galleryId]);
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-[#03040a] text-white flex items-center justify-center px-4">
-        <div className="text-center">
-          <p className="text-xl font-semibold">Loading VR Gallery...</p>
-          <p className="text-sm text-slate-300 mt-2">Preparing the room, textures, and artwork placements.</p>
-        </div>
-      </div>
-    );
+    return <LoadingScreen variant="immersive" title="Loading VR Gallery" subtitle="Preparing the room, textures, and artwork placements." />;
   }
 
   if (error) {
@@ -54,13 +49,15 @@ const VRGallery = () => {
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-[#03040a]">
       <div className="absolute inset-0">
-        <GalleryScene
-          artist={artist}
-          gallery={fallbackGallery}
-          artworks={artworks}
-          onSelectArtwork={setSelectedArtwork}
-          lockSelector="#enter-gallery-button"
-        />
+        <Suspense fallback={<LoadingScreen variant="immersive" title="Loading 3D scene" subtitle="Decoding the gallery architecture and artwork models." />}>
+          <GalleryScene
+            artist={artist}
+            gallery={fallbackGallery}
+            artworks={artworks}
+            onSelectArtwork={setSelectedArtwork}
+            lockSelector="#enter-gallery-button"
+          />
+        </Suspense>
       </div>
 
       <div className="absolute top-4 left-4 z-20 max-w-sm rounded-2xl border border-white/10 bg-black/55 px-4 py-3 text-white backdrop-blur-md shadow-2xl">

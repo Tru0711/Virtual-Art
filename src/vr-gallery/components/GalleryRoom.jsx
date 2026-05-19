@@ -1,5 +1,4 @@
 import React, { Suspense, useMemo } from 'react';
-import * as THREE from 'three';
 import { Environment, Sparkles, Text, useGLTF } from '@react-three/drei';
 import { SELECTED_GALLERY_MODEL, FORCE_SINGLE_GALLERY_MODEL, SELECTED_MODEL_KEY } from '../config';
 import { resolveGalleryModelUrl } from '../utils/galleryCatalog';
@@ -43,6 +42,7 @@ const ProceduralGalleryShell = ({ room, palette, gallery }) => {
   const depth = room.depth;
   const height = room.height;
   const wallThickness = 0.18;
+  const lowEndDevice = typeof navigator !== 'undefined' && ((navigator.deviceMemory || 8) <= 4 || (navigator.hardwareConcurrency || 8) <= 4);
 
   const ceilingPosition = height;
   const lightPositions = useMemo(() => ([
@@ -107,8 +107,8 @@ const ProceduralGalleryShell = ({ room, palette, gallery }) => {
         {gallery.name}
       </Text>
 
-      <Environment preset="studio" />
-      <Sparkles count={35} scale={[width, height, depth]} size={1.4} speed={0.25} color={palette.accent} opacity={0.18} />
+      <Environment preset={lowEndDevice ? 'warehouse' : 'studio'} />
+      <Sparkles count={lowEndDevice ? 12 : 35} scale={[width, height, depth]} size={lowEndDevice ? 1 : 1.4} speed={0.25} color={palette.accent} opacity={0.18} />
     </>
   );
 };
@@ -146,12 +146,5 @@ const GalleryRoom = ({ gallery }) => {
     </>
   );
 };
-
-// Preload only the forced selected gallery model to avoid loading multiple models.
-if (FORCE_SINGLE_GALLERY_MODEL && SELECTED_GALLERY_MODEL?.url) {
-  useGLTF.preload?.(resolveGalleryModelUrl(SELECTED_GALLERY_MODEL.url, SELECTED_MODEL_KEY || 'vr_gallery'));
-} else {
-  useGLTF.preload?.(resolveGalleryModelUrl(new URL('../../../Galleries/vr_gallery.glb', import.meta.url).href, 'vr_gallery'));
-}
 
 export default GalleryRoom;

@@ -1,5 +1,12 @@
 import { memo, useEffect, useMemo, useState, useRef } from 'react';
-import * as THREE from 'three';
+import {
+  ClampToEdgeWrapping,
+  FrontSide,
+  LinearFilter,
+  LinearMipmapLinearFilter,
+  SRGBColorSpace,
+  TextureLoader,
+} from 'three';
 import { Text, useTexture } from '@react-three/drei';
 import { useThree } from '@react-three/fiber';
 import { getImageUrl } from '../../lib/imageUtils';
@@ -15,7 +22,7 @@ const useHDTexture = (imageUrl) => {
   useEffect(() => {
     if (!imageUrl) return;
 
-    const textureLoader = new THREE.TextureLoader();
+    const textureLoader = new TextureLoader();
     textureLoader.load(
       imageUrl,
       (loadedTexture) => {
@@ -39,13 +46,13 @@ const useHDTexture = (imageUrl) => {
 const applyHDTextureSettings = (texture, gl) => {
   try {
     if ('colorSpace' in texture) {
-      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.colorSpace = SRGBColorSpace;
     }
 
-    texture.wrapS = THREE.ClampToEdgeWrapping;
-    texture.wrapT = THREE.ClampToEdgeWrapping;
-    texture.minFilter = THREE.LinearMipmapLinearFilter;
-    texture.magFilter = THREE.LinearFilter;
+    texture.wrapS = ClampToEdgeWrapping;
+    texture.wrapT = ClampToEdgeWrapping;
+    texture.minFilter = LinearMipmapLinearFilter;
+    texture.magFilter = LinearFilter;
 
     const maxAniso = gl?.capabilities?.getMaxAnisotropy?.() || 16;
     texture.anisotropy = Math.min(maxAniso, 16);
@@ -237,7 +244,7 @@ const ArtworkFrame = ({
           color={selectedStyle.outer}
           metalness={selectedStyle.metalness}
           roughness={selectedStyle.roughness}
-          side={THREE.FrontSide}
+          side={FrontSide}
           polygonOffset
           polygonOffsetFactor={1}
           polygonOffsetUnits={1}
@@ -329,7 +336,7 @@ const ArtworkFrame = ({
           map={finalTexture}
           transparent={false}
           toneMapped={false}
-          side={THREE.FrontSide}
+          side={FrontSide}
           depthWrite={false}
           depthTest={false}
         />
@@ -349,7 +356,7 @@ const ArtworkFrame = ({
           clearcoatRoughness={0.12}
           reflectivity={0.45}
           depthWrite={false}
-          side={THREE.FrontSide}
+          side={FrontSide}
         />
       </mesh>
 

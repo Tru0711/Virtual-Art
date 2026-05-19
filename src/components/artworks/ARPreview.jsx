@@ -3,7 +3,7 @@ import { Canvas } from '@react-three/fiber';
 import { ARButton, XR, Controllers, Hands } from '@react-three/xr';
 import { Text, Html } from '@react-three/drei';
 import { X, Eye } from 'lucide-react';
-import * as THREE from 'three';
+import { TextureLoader } from 'three';
 import { getImageUrl } from '../../lib/imageUtils';
 
 
@@ -11,7 +11,7 @@ const ARArtwork = ({ imageUrl, title, onClose }) => {
   const [texture, setTexture] = useState(null);
 
   React.useEffect(() => {
-    const loader = new THREE.TextureLoader();
+    const loader = new TextureLoader();
     loader.load(
       imageUrl,
       (loadedTexture) => {

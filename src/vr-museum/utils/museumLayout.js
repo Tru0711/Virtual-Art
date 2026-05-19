@@ -1,5 +1,5 @@
-import * as THREE from 'three';
 import React from 'react';
+import { Vector3 } from 'three';
 
 
 export class MuseumLayout { 
@@ -22,11 +22,11 @@ export class MuseumLayout {
     const width = 70;
     const depth = 70;
     const height = 10;
-    this.size = new THREE.Vector3(width, height, depth);
+    this.size = new Vector3(width, height, depth);
     this.ceilingY = height;
 
     // Entry starting position
-    this.startPosition = new THREE.Vector3(0, 1.7, -22);
+    this.startPosition = new Vector3(0, 1.7, -22);
 
     // Navigation bounds (simple clamp)
     this.bounds = {
@@ -65,19 +65,19 @@ export class MuseumLayout {
 
     const wallConfigs = [
       { // left hall wall facing north
-        pos: new THREE.Vector3(-16.5, 0, -3.5),
+        pos: new Vector3(-16.5, 0, -3.5),
         rotationY: 0,
       },
       { // right hall
-        pos: new THREE.Vector3(16.5, 0, -3.5),
+        pos: new Vector3(16.5, 0, -3.5),
         rotationY: Math.PI,
       },
       { // modern front
-        pos: new THREE.Vector3(0, 0, -20.5),
+        pos: new Vector3(0, 0, -20.5),
         rotationY: Math.PI / 2,
       },
       { // rear wing
-        pos: new THREE.Vector3(0, 0, 20.5),
+        pos: new Vector3(0, 0, 20.5),
         rotationY: -Math.PI / 2,
       },
     ];

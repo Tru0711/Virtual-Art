@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import * as THREE from 'three';
+import { MathUtils, PCFShadowMap, Vector3 } from 'three';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { PointerLockControls, useGLTF } from '@react-three/drei';
 import ArtworkFrame from '../components/ArtworkFrame';
@@ -9,13 +9,23 @@ import { analyzeWallStructure, buildArtworkPlacements } from '../utils/artworkLa
 import { SELECTED_GALLERY_MODEL, FORCE_SINGLE_GALLERY_MODEL, SELECTED_MODEL_KEY } from '../config';
 import { Suspense } from 'react';
 
+const getLowEndDeviceHint = () => {
+  if (typeof navigator === 'undefined') return false;
+
+  const deviceMemory = navigator.deviceMemory || 8;
+  const hardwareConcurrency = navigator.hardwareConcurrency || 8;
+  const coarsePointer = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)')?.matches;
+
+  return deviceMemory <= 4 || hardwareConcurrency <= 4 || coarsePointer;
+};
+
 const CameraController = ({ room, lockSelector }) => {
   const controls = useRef();
   const keys = useRef({});
-  const forward = useMemo(() => new THREE.Vector3(), []);
-  const right = useMemo(() => new THREE.Vector3(), []);
-  const moveDirection = useMemo(() => new THREE.Vector3(), []);
-  const up = useMemo(() => new THREE.Vector3(0, 1, 0), []);
+  const forward = useMemo(() => new Vector3(), []);
+  const right = useMemo(() => new Vector3(), []);
+  const moveDirection = useMemo(() => new Vector3(), []);
+  const up = useMemo(() => new Vector3(0, 1, 0), []);
   const { camera } = useThree();
 
   useEffect(() => {
@@ -57,7 +67,7 @@ const CameraController = ({ room, lockSelector }) => {
       forward.normalize();
       right.crossVectors(forward, up).normalize();
 
-      const movement = new THREE.Vector3()
+      const movement = new Vector3()
         .addScaledVector(right, moveDirection.x)
         .addScaledVector(forward, -moveDirection.z);
 
@@ -66,8 +76,8 @@ const CameraController = ({ room, lockSelector }) => {
 
     const halfWidth = room.width / 2 - 1.35;
     const halfDepth = room.depth / 2 - 1.35;
-    state.camera.position.x = THREE.MathUtils.clamp(state.camera.position.x, -halfWidth, halfWidth);
-    state.camera.position.z = THREE.MathUtils.clamp(state.camera.position.z, -halfDepth, halfDepth);
+    state.camera.position.x = MathUtils.clamp(state.camera.position.x, -halfWidth, halfWidth);
+    state.camera.position.z = MathUtils.clamp(state.camera.position.z, -halfDepth, halfDepth);
     state.camera.position.y = 1.7;
   });
 
@@ -90,7 +100,7 @@ const ArtworkCluster = ({ placements, palette, artistName, onSelectArtwork }) =>
       z + normalZ * 1.15,
     ];
 
-    const distance = camera.position.distanceTo(new THREE.Vector3(x, y, z));
+    const distance = camera.position.distanceTo(new Vector3(x, y, z));
     const shouldRenderArtwork = distance <= viewDistance;
     const shouldCastShadow = placement.id === placements[0]?.id;
 
@@ -133,6 +143,7 @@ const GalleryScene = ({
   lockSelector = '#enter-gallery-button',
 }) => {
   const layoutWalls = useMemo(() => ['north', 'east', 'west'], []);
+  const lowEndDevice = useMemo(() => getLowEndDeviceHint(), []);
   const sceneGallery = useMemo(() => buildGalleryProfile(gallery || {}, artworks.length), [artworks.length, gallery]);
   // If configured, force the scene to use only the selected gallery model from Galleries/
   if (FORCE_SINGLE_GALLERY_MODEL && SELECTED_GALLERY_MODEL) {
@@ -196,7 +207,7 @@ const GalleryScene = ({
           // Shadow mapping
           if (gl && 'shadowMap' in gl) {
             gl.shadowMap = gl.shadowMap || {};
-            gl.shadowMap.type = THREE.PCFShadowMap;
+            gl.shadowMap.type = PCFShadowMap;
             gl.shadowMap.autoUpdate = true;
           }
           
@@ -213,7 +224,7 @@ const GalleryScene = ({
           }
           
           // Pixel ratio for retina displays
-          const dpr = Math.min(window.devicePixelRatio || 1, 2);
+          const dpr = Math.min(window.devicePixelRatio || 1, lowEndDevice ? 1.25 : 2);
           gl.setPixelRatio(dpr);
           
           // Power preference for better texture filtering
@@ -222,7 +233,7 @@ const GalleryScene = ({
           console.warn('[GalleryScene] Renderer optimization warning:', e);
         }
       }}
-      dpr={[1, 2]}
+      dpr={lowEndDevice ? [1, 1.25] : [1, 2]}
       camera={{
         position: [0, 1.7, placementGallery.room.depth / 2 - 3.2],
         fov: 52,
@@ -231,10 +242,10 @@ const GalleryScene = ({
         zoom: 1
       }}
       gl={{
-        antialias: true,
-        preserveDrawingBuffer: true,
-        powerPreference: 'high-performance',
-        precision: 'highp',
+        antialias: !lowEndDevice,
+        preserveDrawingBuffer: false,
+        powerPreference: lowEndDevice ? 'low-power' : 'high-performance',
+        precision: lowEndDevice ? 'mediump' : 'highp',
         stencil: false,
         depth: true,
         alpha: false,

@@ -10,6 +10,8 @@ const VREntryPopup = ({ isOpen, artistId, galleryId, onClose }) => {
   useEffect(() => {
     if (!isOpen) return;
 
+    void import('../pages/VRGallery.jsx');
+
     const startTime = Date.now();
     const duration = 4000; // 4 seconds
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import * as THREE from 'three';
+import { Vector3 } from 'three';
 
 export class MuseumLayout {
   constructor({ artistsCount = 1 } = {}) {
@@ -19,10 +19,10 @@ export class MuseumLayout {
     const width = 70;
     const depth = 70;
     const height = 10;
-    this.size = new THREE.Vector3(width, height, depth);
+    this.size = new Vector3(width, height, depth);
     this.ceilingY = height;
 
-    this.startPosition = new THREE.Vector3(0, 1.7, -22);
+    this.startPosition = new Vector3(0, 1.7, -22);
 
     this.bounds = {
       minX: -width / 2 + 2,
@@ -55,10 +55,10 @@ export class MuseumLayout {
     const artistIndex = this._artistIndex(artistId);
 
     const wallConfigs = [
-      { pos: new THREE.Vector3(-16.5, 0, -3.5), rotationY: 0 },
-      { pos: new THREE.Vector3(16.5, 0, -3.5), rotationY: Math.PI },
-      { pos: new THREE.Vector3(0, 0, -20.5), rotationY: Math.PI / 2 },
-      { pos: new THREE.Vector3(0, 0, 20.5), rotationY: -Math.PI / 2 },
+      { pos: new Vector3(-16.5, 0, -3.5), rotationY: 0 },
+      { pos: new Vector3(16.5, 0, -3.5), rotationY: Math.PI },
+      { pos: new Vector3(0, 0, -20.5), rotationY: Math.PI / 2 },
+      { pos: new Vector3(0, 0, 20.5), rotationY: -Math.PI / 2 },
     ];
 
     const cfg = wallConfigs[artistIndex % wallConfigs.length];

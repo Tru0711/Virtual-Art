@@ -11,6 +11,64 @@ export default defineConfig(({ mode }) => {
     optimizeDeps: {
       exclude: ['lucide-react'],
     },
+    build: {
+      assetsInlineLimit: 0,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes('node_modules')) {
+              return undefined;
+            }
+
+            if (id.includes('/node_modules/three/examples/')) {
+              return 'three-examples';
+            }
+
+            if (id.includes('/node_modules/three/')) {
+              return 'three';
+            }
+
+            if (id.includes('/node_modules/@react-three/fiber')) {
+              return 'fiber';
+            }
+
+            if (id.includes('/node_modules/@react-three/drei')) {
+              return 'drei';
+            }
+
+            if (id.includes('/node_modules/@react-three/xr')) {
+              return 'xr';
+            }
+
+            if (id.includes('/node_modules/react-router-dom')) {
+              return 'router';
+            }
+
+            if (id.includes('/node_modules/framer-motion')) {
+              return 'motion';
+            }
+
+            if (id.includes('/node_modules/recharts')) {
+              return 'charts';
+            }
+
+            if (id.includes('/node_modules/socket.io-client')) {
+              return 'sockets';
+            }
+
+            if (id.includes('/node_modules/lucide-react')) {
+              return 'icons';
+            }
+
+            if (id.includes('/node_modules/react-dom') || id.includes('/node_modules/react/')) {
+              return 'react';
+            }
+
+            return undefined;
+          },
+        },
+      },
+    },
     server: {
       proxy: {
         '/api': {
