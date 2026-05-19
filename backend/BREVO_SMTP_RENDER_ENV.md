@@ -1,6 +1,6 @@
 # Brevo SMTP on Render
 
-Set these environment variables in Render for production email delivery:
+Set these environment variables in Render or Vercel for production email delivery:
 
 ```dotenv
 BREVO_SMTP_HOST=smtp-relay.brevo.com
@@ -22,3 +22,9 @@ Notes:
 - `SMTP_SEND_TIMEOUT_MS` keeps Render requests from hanging when the mail provider is slow.
 - `SMTP_VERIFY_TIMEOUT_MS` limits startup verification latency.
 - `EMAIL_DEDUPE_WINDOW_MS` prevents duplicate sends for the same payload during short retry windows.
+
+Implementation notes:
+
+- The backend uses a single shared config module at `backend/config/email.js`.
+- The transporter is created once, verified with `transporter.verify()`, and then reused.
+- Duplicate sends are deduped in-memory by payload key and also coalesced while a send is in flight.

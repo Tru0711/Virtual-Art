@@ -1,91 +1,13 @@
-const nodemailer = require('nodemailer');
+const {
+  DEFAULT_DEDUPE_WINDOW_MS,
+  getEmailConfig,
+  getTransporter,
+  normalizeError,
+  withTimeout,
+} = require('../config/email');
 
-const DEFAULT_SMTP_HOST = 'smtp-relay.brevo.com';
-const DEFAULT_SMTP_PORT = 587;
-const DEFAULT_SMTP_SECURE = false;
-const DEFAULT_SEND_TIMEOUT_MS = 8000;
-const DEFAULT_VERIFY_TIMEOUT_MS = 10000;
-const DEFAULT_DEDUPE_WINDOW_MS = 10000;
-
-let transporterPromise;
 const inflightEmailSends = new Map();
 const recentlySentEmails = new Map();
-
-const readBoolean = (value, fallback = false) => {
-  if (value === undefined || value === null || value === '') return fallback;
-  return String(value).toLowerCase() === 'true';
-};
-
-const readNumber = (value, fallback) => {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-};
-
-const getSmtpConfig = () => {
-  const host = process.env.BREVO_SMTP_HOST || process.env.SMTP_HOST || DEFAULT_SMTP_HOST;
-  const port = readNumber(process.env.BREVO_SMTP_PORT || process.env.SMTP_PORT, DEFAULT_SMTP_PORT);
-  const secure = readBoolean(process.env.BREVO_SMTP_SECURE ?? process.env.SMTP_SECURE, DEFAULT_SMTP_SECURE);
-  const user = process.env.BREVO_SMTP_USER || process.env.SMTP_USER || process.env.EMAIL_ADDRESS;
-  const pass = process.env.BREVO_SMTP_PASS || process.env.SMTP_PASS || process.env.EMAIL_PASSWORD || process.env.APP_PASSWORD;
-  const from = process.env.BREVO_SMTP_FROM || process.env.SMTP_FROM || process.env.EMAIL_FROM || user;
-  const sendTimeoutMs = readNumber(process.env.SMTP_SEND_TIMEOUT_MS || process.env.SMTP_TIMEOUT_MS, DEFAULT_SEND_TIMEOUT_MS);
-  const verifyTimeoutMs = readNumber(process.env.SMTP_VERIFY_TIMEOUT_MS, DEFAULT_VERIFY_TIMEOUT_MS);
-  const dedupeWindowMs = readNumber(process.env.EMAIL_DEDUPE_WINDOW_MS, DEFAULT_DEDUPE_WINDOW_MS);
-
-  return {
-    host,
-    port,
-    secure,
-    user,
-    pass,
-    from,
-    sendTimeoutMs,
-    verifyTimeoutMs,
-    dedupeWindowMs,
-  };
-};
-
-const redactEmailAddress = (value) => {
-  if (!value) return 'MISSING';
-  return String(value).replace(/(^.).*(@.*$)/, '$1***$2');
-};
-
-const withTimeout = (promise, timeoutMs, label) => {
-  let timeoutId;
-
-  const timeoutPromise = new Promise((_, reject) => {
-    timeoutId = setTimeout(() => {
-      const error = new Error(`${label} timed out after ${timeoutMs}ms`);
-      error.code = 'EMAIL_TIMEOUT';
-      error.statusCode = 504;
-      reject(error);
-    }, timeoutMs);
-  });
-
-  return Promise.race([
-    promise.finally(() => clearTimeout(timeoutId)),
-    timeoutPromise,
-  ]);
-};
-
-const buildEmailError = (error, stage) => {
-  if (error?.code === 'EMAIL_TIMEOUT') {
-    return error;
-  }
-
-  const normalized = new Error(error?.message || `Failed to ${stage} email`);
-  normalized.code = error?.code || 'EMAIL_SEND_FAILED';
-  normalized.statusCode = error?.responseCode && error.responseCode >= 500 ? 503 : 502;
-  normalized.publicMessage =
-    stage === 'verify'
-      ? 'Email service verification failed. Check your SMTP credentials.'
-      : 'Email delivery is temporarily unavailable. Please try again.';
-  normalized.responseCode = error?.responseCode;
-  normalized.response = error?.response;
-  normalized.command = error?.command;
-  normalized.cause = error;
-  return normalized;
-};
 
 const cleanupRecentCache = (dedupeWindowMs) => {
   const cutoff = Date.now() - dedupeWindowMs;
@@ -96,75 +18,17 @@ const cleanupRecentCache = (dedupeWindowMs) => {
   }
 };
 
-const getTransport = async () => {
-  if (!transporterPromise) {
-    transporterPromise = (async () => {
-      const config = getSmtpConfig();
-
-      console.info('[email] SMTP configuration', {
-        provider: 'brevo',
-        host: config.host,
-        port: config.port,
-        secure: config.secure,
-        user: redactEmailAddress(config.user),
-        fromConfigured: Boolean(config.from),
-        sendTimeoutMs: config.sendTimeoutMs,
-        verifyTimeoutMs: config.verifyTimeoutMs,
-      });
-
-      if (!config.host || !config.user || !config.pass || !config.from) {
-        throw new Error('Missing SMTP configuration. Set BREVO_SMTP_HOST, BREVO_SMTP_PORT, BREVO_SMTP_USER, BREVO_SMTP_PASS, and BREVO_SMTP_FROM in Render.');
-      }
-
-      const transporter = nodemailer.createTransport({
-        host: config.host,
-        port: config.port,
-        secure: config.secure,
-        auth: {
-          user: config.user,
-          pass: config.pass,
-        },
-        pool: true,
-        maxConnections: 2,
-        maxMessages: 50,
-        connectionTimeout: config.sendTimeoutMs,
-        greetingTimeout: config.sendTimeoutMs,
-        socketTimeout: config.sendTimeoutMs,
-        tls: {
-          rejectUnauthorized: true,
-        },
-      });
-
-      try {
-        await withTimeout(transporter.verify(), config.verifyTimeoutMs, 'SMTP verification');
-        console.info('[email] SMTP transporter verified successfully', {
-          provider: 'brevo',
-          host: config.host,
-          port: config.port,
-        });
-      } catch (error) {
-        transporterPromise = undefined;
-        throw buildEmailError(error, 'verify');
-      }
-
-      return transporter;
-    })().catch((error) => {
-      transporterPromise = undefined;
-      throw error;
-    });
-  }
-
-  return transporterPromise;
-};
-
 const buildEmailKey = ({ to, subject, text, html }) => [to, subject, text || '', html || ''].join('|');
 
 const sendEmail = async ({ to, subject, text, html, from: fromOverride }) => {
-  const config = getSmtpConfig();
+  const config = getEmailConfig();
   const from = fromOverride || config.from;
 
   if (!from) {
-    throw new Error('Missing SMTP_FROM configuration. Set BREVO_SMTP_FROM in Render.');
+    const error = new Error('Missing Brevo sender configuration. Set BREVO_SMTP_FROM.');
+    error.code = 'EMAIL_FROM_MISSING';
+    error.statusCode = 500;
+    throw error;
   }
 
   const emailKey = buildEmailKey({ to, subject, text, html });
@@ -193,7 +57,7 @@ const sendEmail = async ({ to, subject, text, html, from: fromOverride }) => {
   });
 
   const sendPromise = (async () => {
-    const transporter = await getTransport();
+    const transporter = await getTransporter();
 
     try {
       const info = await withTimeout(
@@ -230,7 +94,7 @@ const sendEmail = async ({ to, subject, text, html, from: fromOverride }) => {
         message: error?.message,
       });
 
-      throw buildEmailError(error, 'send');
+      throw normalizeError(error, 'send');
     }
   })();
 
