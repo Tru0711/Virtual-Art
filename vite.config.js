@@ -12,6 +12,9 @@ export default defineConfig(({ mode }) => {
       exclude: ['lucide-react'],
     },
     build: {
+      // WebXR apps intentionally ship a larger 3D vendor chunk; keep the warning
+      // high enough to avoid noise while still flagging real regressions.
+      chunkSizeWarningLimit: 800,
       assetsInlineLimit: 0,
       rollupOptions: {
         output: {
